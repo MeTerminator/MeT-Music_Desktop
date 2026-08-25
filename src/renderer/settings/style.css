@@ -829,3 +829,208 @@ input:checked + .slider:before {
     flex-shrink: 0;
     min-width: 118px;
 }
+
+/* ==================================================== */
+/* 浅色模式(prefers-color-scheme 跟随系统;深色为上方默认) */
+/* ==================================================== */
+@media (prefers-color-scheme: light) {
+    body {
+        color: #1f2937;
+    }
+
+    .settings-container {
+        background: #f4f5f7;
+        border-color: rgba(0, 0, 0, 0.08);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+    }
+
+    .title-bar {
+        border-bottom-color: rgba(0, 0, 0, 0.06);
+    }
+
+    .title {
+        color: #111827;
+    }
+
+    .close-btn {
+        color: #6b7280;
+    }
+
+    .settings-nav {
+        border-right-color: rgba(0, 0, 0, 0.06);
+    }
+
+    .nav-group-title {
+        color: rgba(0, 0, 0, 0.35);
+    }
+
+    .nav-item {
+        color: #4b5563;
+    }
+
+    .nav-item:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: #111827;
+    }
+
+    .nav-item.active {
+        background: rgba(59, 130, 246, 0.14);
+        color: #1d4ed8;
+    }
+
+    .settings-nav::-webkit-scrollbar-thumb,
+    .settings-content::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.18);
+    }
+
+    .settings-nav::-webkit-scrollbar-thumb:hover,
+    .settings-content::-webkit-scrollbar-thumb:hover,
+    .settings-content::-webkit-scrollbar-thumb:active {
+        background-color: rgba(0, 0, 0, 0.32);
+    }
+
+    .settings-section h3 {
+        color: #6b7280;
+    }
+
+    .setting-item {
+        background: #ffffff;
+        border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    .setting-item label {
+        color: #374151;
+    }
+
+    input[type="range"] {
+        background: rgba(0, 0, 0, 0.12);
+    }
+
+    .text-input,
+    .select-input {
+        color: #111827;
+        background: #ffffff;
+        border-color: rgba(0, 0, 0, 0.15);
+    }
+
+    .font-status {
+        color: #b45309;
+    }
+
+    .font-license-note {
+        color: #6b7280;
+    }
+
+    .slider {
+        background-color: rgba(0, 0, 0, 0.18);
+    }
+
+    .btn-secondary {
+        background: rgba(0, 0, 0, 0.06);
+        color: #1f2937;
+        border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    .btn-secondary:hover {
+        background: rgba(0, 0, 0, 0.12);
+    }
+
+    .screen-info {
+        color: #4b5563;
+        background: rgba(0, 0, 0, 0.06);
+    }
+
+    .drag-pad-wrapper {
+        background: rgba(0, 0, 0, 0.05);
+        border-color: rgba(0, 0, 0, 0.22);
+    }
+
+    .step-selector {
+        background: rgba(0, 0, 0, 0.06);
+    }
+
+    .step-btn {
+        color: #4b5563;
+    }
+
+    .dpad-btn {
+        background: rgba(0, 0, 0, 0.05);
+        color: #374151;
+    }
+
+    .dpad-center {
+        background: rgba(59, 130, 246, 0.15);
+        color: #2563eb;
+    }
+
+    .num-input {
+        background: #ffffff;
+        color: #111827;
+        border-color: rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-preset {
+        background: rgba(0, 0, 0, 0.05);
+        color: #374151;
+    }
+
+    .api-status {
+        background: rgba(0, 0, 0, 0.04);
+        color: #374151;
+    }
+
+    .api-value {
+        color: #1f2937;
+    }
+
+    .api-note,
+    .setting-note,
+    .api-sub,
+    .setting-sub,
+    .api-hint,
+    .api-desc,
+    .api-list {
+        color: #6b7280;
+    }
+
+    .api-code,
+    .api-list code {
+        background: rgba(0, 0, 0, 0.06);
+        color: #3730a3;
+    }
+
+    .api-path {
+        color: #1f2937;
+    }
+
+    .api-method-get {
+        background: rgba(34, 197, 94, 0.15);
+        color: #15803d;
+    }
+
+    .api-method-post {
+        background: rgba(59, 130, 246, 0.15);
+        color: #1d4ed8;
+    }
+
+    .api-method-ws {
+        background: rgba(168, 85, 247, 0.15);
+        color: #7e22ce;
+    }
+
+    .api-status-error .api-status-text {
+        color: #b91c1c;
+    }
+
+    .btn-copy.is-copied {
+        color: #15803d;
+    }
+
+    .btn-copy.is-failed {
+        color: #b91c1c;
+    }
+
+    .handle-label {
+        color: #ffffff;
+    }
+}
