@@ -214,7 +214,15 @@ export type HostCallbacks = z.infer<typeof HostCallbacksSchema>;
  */
 export interface MeTMusicGlobals {
   /** 最近一次 hook payload(UI 启动时为空骨架) */
-  $MeTMusic_Data: HookPayload | Record<string, unknown>;
+  $MeTMusic_Data: HookPayload | {
+    songName: string;
+    songArtist: string;
+    songMid: string;
+    currentTime: "";
+    duration: "";
+    lrcContent: string;
+    lrcTrans: string;
+  };
   /** 宿主注入的状态回调;UI 启动时为 null */
   $MeTMusic_Hook: ((data: HookPayload) => void) | null;
   $MeTMusic_playOrPause: () => void;

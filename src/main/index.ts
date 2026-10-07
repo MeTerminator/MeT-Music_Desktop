@@ -425,7 +425,7 @@ let lastEventState: string | null = null;
 let lastProgressEventTime = 0;
 let statePollTimer: ReturnType<typeof setInterval> | null = null;
 
-function broadcastState(state: string, positionMs: number, durationMs: number): void {
+function broadcastState(state: "playing" | "paused" | "stopped", positionMs: number, durationMs: number): void {
     if (state === lastEventState) return;
     lastEventState = state;
     externalApi.broadcastEvent("state", {

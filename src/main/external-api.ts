@@ -1,8 +1,13 @@
+import { ZodError, type z } from "zod";
+import {
+    ExternalCommandSchema, ExternalEventSchemas, ExternalServerMessageSchema, SeekBodySchema, VolumeBodySchema,
+    type ExternalEventType, type ExternalEventData, type ExternalServerMessage
+} from "../shared/external-api-contract";
 import http from "node:http";
 import os from "node:os";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ExternalApiConfig, ExternalApiStatus } from "../shared/ipc";
-import type { LyricsSnapshot, NowPlaying, PlaybackSnapshot } from "../shared/hook-contract";
+import { LyricsSnapshotSchema, NowPlayingSchema, PlaybackSnapshotSchema, type LyricsSnapshot, type NowPlaying, type PlaybackSnapshot } from "../shared/hook-contract";
 
 /**
  * 外部 API(HTTP + WebSocket)。
@@ -38,7 +43,7 @@ export interface ExternalApiDeps {
 }
 
 /** 下行事件(kind: "event")的类型 */
-export type ExternalApiEventType = "state" | "progress" | "track";
+export type ExternalApiEventType = ExternalEventType;
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -90,7 +95,9 @@ export function setStatusListener(listener: (status: ExternalApiStatus) => void)
 
 /* ========== HTTP ========== */
 
-function sendJson(res: http.ServerResponse, statusCode: number, body: unknown): void {
+type HttpResponseBody = PlaybackSnapshot | NowPlaying | LyricsSnapshot | { error: string } | { ok: true } | { volume: number } | { name: string; version: string; wsClients: number };
+
+function sendJson(res: http.ServerResponse, statusCode: number, body: HttpResponseBody): void {
     const payload = JSON.stringify(body);
     res.writeHead(statusCode, {
         "Content-Type": "application/json; charset=utf-8",
@@ -120,21 +127,17 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
 }
 
 /** 取数类端点:UI 缺少对应能力时统一回 501 */
-async function respondSnapshot(
+async function respondSnapshot<T extends PlaybackSnapshot | NowPlaying | LyricsSnapshot>(
     res: http.ServerResponse,
-    load: () => Promise<unknown | null>
+    load: () => Promise<T | null>,
+    schema: z.ZodType<T>
 ): Promise<void> {
     const data = await load();
     if (data === null || data === undefined) {
         sendJson(res, 501, { error: "player is not ready" });
         return;
     }
-    sendJson(res, 200, data);
-}
-
-function numberField(body: Record<string, unknown>, key: string): number | null {
-    const value = body[key];
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
+    sendJson(res, 200, schema.parse(data));
 }
 
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -168,7 +171,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
                 return;
             }
             case "/api/status":
-                await respondSnapshot(res, () => api.getPlaybackState());
+                await respondSnapshot(res, () => api.getPlaybackState(), PlaybackSnapshotSchema.strict());
                 return;
             case "/api/volume": {
                 const state = await api.getPlaybackState();
@@ -176,14 +179,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
                     sendJson(res, 501, { error: "player is not ready" });
                     return;
                 }
-                sendJson(res, 200, { volume: state.volume });
+                sendJson(res, 200, { volume: PlaybackSnapshotSchema.strict().parse(state).volume });
                 return;
             }
             case "/api/now-playing":
-                await respondSnapshot(res, () => api.getNowPlaying());
+                await respondSnapshot(res, () => api.getNowPlaying(), NowPlayingSchema.strict());
                 return;
             case "/api/lyrics":
-                await respondSnapshot(res, () => api.getLyrics());
+                await respondSnapshot(res, () => api.getLyrics(), LyricsSnapshotSchema.strict());
                 return;
         }
     }
@@ -212,8 +215,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
                 return;
             case "/api/seek": {
                 const body = await readJsonBody(req);
-                const positionMs = numberField(body, "positionMs");
-                if (positionMs === null || positionMs < 0) {
+                const { positionMs } = SeekBodySchema.parse(body);
+                if (positionMs < 0) {
                     sendJson(res, 400, { error: "positionMs must be a number >= 0" });
                     return;
                 }
@@ -223,8 +226,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             }
             case "/api/volume": {
                 const body = await readJsonBody(req);
-                const volume = numberField(body, "volume");
-                if (volume === null || volume < 0 || volume > 1) {
+                const { volume } = VolumeBodySchema.parse(body);
+                if (volume < 0 || volume > 1) {
                     sendJson(res, 400, { error: "volume must be a number between 0 and 1" });
                     return;
                 }
@@ -240,15 +243,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
 /* ========== WebSocket ========== */
 
-function sendWs(socket: WebSocket, message: unknown): void {
+function sendWs(socket: WebSocket, message: ExternalServerMessage): void {
     if (socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify(message));
+    socket.send(JSON.stringify(ExternalServerMessageSchema.parse(message)));
 }
 
 /** 广播播放事件(index.ts 在 hook 状态变化时调用;无连接时是空操作) */
-export function broadcastEvent(type: ExternalApiEventType, data: unknown): void {
+export function broadcastEvent<T extends ExternalApiEventType>(type: T, data: ExternalEventData<T>): void {
     if (!wsServer || wsServer.clients.size === 0) return;
-    const message = JSON.stringify({ kind: "event", type, data });
+    const message = JSON.stringify({ kind: "event", type, data: ExternalEventSchemas[type].parse(data) });
     for (const client of wsServer.clients) {
         if (client.readyState === WebSocket.OPEN) client.send(message);
     }
@@ -270,14 +273,16 @@ function handleWsMessage(socket: WebSocket, raw: string): void {
         return;
     }
 
-    const body = payload as Record<string, unknown>;
-    const op = typeof body.op === "string" ? body.op : null;
-    if (!op) {
-        sendWs(socket, { kind: "error", op: null, error: "missing op" });
+    const result = ExternalCommandSchema.safeParse(payload);
+    if (!result.success) {
+        const op = typeof payload === "object" && payload !== null && "op" in payload && typeof payload.op === "string" ? payload.op : null;
+        sendWs(socket, { kind: "error", op, error: "invalid command" });
         return;
     }
+    const body = result.data;
+    const op = body.op;
 
-    switch (op) {
+    switch (body.op) {
         case "play":
             api.play();
             break;
@@ -294,8 +299,8 @@ function handleWsMessage(socket: WebSocket, raw: string): void {
             api.prev();
             break;
         case "seek": {
-            const positionMs = numberField(body, "positionMs");
-            if (positionMs === null || positionMs < 0) {
+            const { positionMs } = body;
+            if (positionMs < 0) {
                 sendWs(socket, { kind: "error", op, error: "positionMs must be a number >= 0" });
                 return;
             }
@@ -303,8 +308,8 @@ function handleWsMessage(socket: WebSocket, raw: string): void {
             break;
         }
         case "setVolume": {
-            const volume = numberField(body, "volume");
-            if (volume === null || volume < 0 || volume > 1) {
+            const { volume } = body;
+            if (volume < 0 || volume > 1) {
                 sendWs(socket, { kind: "error", op, error: "volume must be a number between 0 and 1" });
                 return;
             }
@@ -333,7 +338,8 @@ function handleWsMessage(socket: WebSocket, raw: string): void {
 async function sendHelloSnapshot(socket: WebSocket): Promise<void> {
     const api = deps;
     if (!api) return;
-    const now = await api.getNowPlaying();
+    const snapshot = await api.getNowPlaying();
+    const now = snapshot ? NowPlayingSchema.strict().parse(snapshot) : null;
     // 取数是异步的,期间客户端可能已经断开;sendWs 自己判 readyState,这里不必再判
     if (!now) return;
     sendWs(socket, {
@@ -359,7 +365,9 @@ function createWsServer(server: http.Server): WebSocketServer {
 
     wss.on("connection", (socket) => {
         sendWs(socket, { kind: "hello", clients: wss.clients.size });
-        void sendHelloSnapshot(socket);
+        void sendHelloSnapshot(socket).catch(() => {
+            sendWs(socket, { kind: "error", op: null, error: "invalid player snapshot" });
+        });
         emitStatus();
 
         socket.on("message", (data) => {
@@ -404,7 +412,7 @@ function start(config: ExternalApiConfig): void {
             const message = err instanceof Error ? err.message : String(err);
             // 请求体非法/超限属于客户端问题,回 400;其余按 500
             const isBadRequest =
-                message.includes("body") || message.toLowerCase().includes("json");
+                err instanceof ZodError || message.includes("body") || message.toLowerCase().includes("json");
             if (!res.headersSent) {
                 sendJson(res, isBadRequest ? 400 : 500, { error: message });
             } else {
