@@ -3,7 +3,7 @@
  *
  * 本文件在两个仓库中各有一份【内容完全相同】的副本,修改必须同步提交两仓:
  *   - MeT-Music_UI:  packages/app/src/host/contract.ts
- *   - MeT-Music_App: src/shared/hook-contract.ts
+ *   - MeT-Music_Desktop: src/shared/hook-contract.ts
  *
  * 契约双方:
  *   - UI(web 播放器,https://music.met6.top:444/app/)实现并暴露全局函数;

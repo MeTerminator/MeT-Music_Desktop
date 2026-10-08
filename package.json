@@ -1,7 +1,7 @@
 {
-    "name": "metmusic-app",
+    "name": "metmusic-desktop",
     "version": "2.1.0",
-    "description": "MeT-Music_App",
+    "description": "MeT-Music_Desktop",
     "main": "./out/main/index.js",
     "scripts": {
         "dev": "electron-vite dev",
@@ -21,7 +21,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/MeTerminator/MeT-Music_App.git"
+        "url": "https://github.com/MeTerminator/MeT-Music_Desktop.git"
     },
     "homepage": "https://met6.top/music/",
     "license": "MIT",

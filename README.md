@@ -1,4 +1,4 @@
-# MeT-Music_App
+# MeT-Music_Desktop
 
 > MeT-Music 桌面客户端，包含桌面歌词，后台播放，播放控制等功能。由 Electron 编写，支持多平台。
 
@@ -25,8 +25,8 @@
 ### 2. 克隆项目
 
 ```bash
-git clone https://github.com/MeTerminator/MeT-Music_App.git
-cd MeT-Music_App
+git clone https://github.com/MeTerminator/MeT-Music_Desktop.git
+cd MeT-Music_Desktop
 ```
 
 ### 3. 安装依赖
