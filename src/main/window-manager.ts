@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, screen, type BrowserWindowConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, screen, shell, type BrowserWindowConstructorOptions } from "electron";
 import path from "node:path";
 import { CH } from "../shared/ipc";
 import * as appConfig from "./app-config";
@@ -176,6 +176,22 @@ export function createMainWindow(): BrowserWindow {
         }
     });
     mainWindow = win;
+
+    // 隔空播放由系统浏览器承接,保留 UI 提供的 sid / room 等查询参数。
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+            const target = new URL(url);
+            if ((target.protocol === "https:" || target.protocol === "http:") && /^\/player\/?$/.test(target.pathname)) {
+                void shell.openExternal(target.href).catch((error) => {
+                    console.error("[window] failed to open remote player in browser:", error);
+                });
+                return { action: "deny" };
+            }
+        } catch {
+            return { action: "deny" };
+        }
+        return { action: "allow" };
+    });
 
     win.webContents.setBackgroundThrottling(false);
     win.loadURL(process.env.METMUSIC_UI_URL || "https://music.met6.top:444/app/");

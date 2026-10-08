@@ -181,7 +181,7 @@ export type LyricsSnapshot = z.infer<typeof LyricsSnapshotSchema>;
 const hostCallback = () => z.custom<() => void>((v) => typeof v === "function").optional();
 
 export const HostCallbacksSchema = z.object({
-  /** 用户点击 UI 内"设置"按钮(打开桌面歌词外观设置窗) */
+  /** 用户点击 UI 内"客户端设置"按钮(打开客户端设置窗) */
   onOpenSettings: hostCallback(),
   /** 用户点击 UI 内"隐藏"按钮(主窗隐藏到托盘) */
   onHideWindow: hostCallback(),
