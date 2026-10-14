@@ -281,11 +281,14 @@ export function App(): JSX.Element {
             latestDataRef.current = nextData;
 
             if (lineChanged) {
+                const renderedStyle = currentLineElRef.current
+                    ? getComputedStyle(currentLineElRef.current) : null;
                 // 离场快照(冻结旧行的染色进度),行 key 自增以强制重放行切换过渡
                 const snapshot: LeavingLine = {
                     ...cur,
-                    posX: ktvBackgroundPositionX(ktvRef.current.percent),
-                    tx: ktvRef.current.tx,
+                    posX: renderedStyle?.backgroundPositionX ?? ktvBackgroundPositionX(ktvRef.current.percent),
+                    tx: renderedStyle && renderedStyle.transform !== "none"
+                        ? new DOMMatrixReadOnly(renderedStyle.transform).m41 : ktvRef.current.tx,
                 };
                 const nextLine: LineState = {
                     key: cur.key + 1,
@@ -378,10 +381,10 @@ export function App(): JSX.Element {
     }, [handleLyricChange]);
 
     /** 行切换后:渲染完成再测量新行布局(对应旧 nextTick(scheduleKtvProgressUpdate)) */
-    useEffect(() => {
+    useLayoutEffect(() => {
         metricsRef.current = null;
-        scheduleKtvUpdate();
-    }, [line.key, scheduleKtvUpdate]);
+        updateKtvProgress();
+    }, [line.key, updateKtvProgress]);
 
     /** 离场行在过渡结束后移除 */
     useEffect(() => {
@@ -721,8 +724,7 @@ export function App(): JSX.Element {
         "--main-color": hexToRgba(config.textColor, config.textOpacity),
         "--color-active": activeColor,
         "--color-inactive": config.colorInactive,
-        "--lyric-stroke-width": `${config.strokeWidth}px`,
-        "--lyric-stroke-color": config.strokeColor,
+        "--lyric-outline-filter": config.strokeWidth > 0 ? "url(#lyric-outline)" : "none",
         "--hover-bg-color": config.bgColor,
         opacity: appOpacity,
     } as CSSProperties;
@@ -741,6 +743,24 @@ export function App(): JSX.Element {
 
     return (
         <div id="app" className={appClassName} style={appStyle}>
+            <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
+                <defs>
+                    <filter id="lyric-outline" x="-50%" y="-100%" width="200%" height="300%"
+                        colorInterpolationFilters="sRGB">
+                        <feComponentTransfer in="SourceAlpha" result="glyph-mask">
+                            <feFuncA type="linear" slope="10000" />
+                        </feComponentTransfer>
+                        <feMorphology in="glyph-mask" operator="dilate" radius={config.strokeWidth} result="expanded" />
+                        <feComposite in="expanded" in2="glyph-mask" operator="out" result="outline" />
+                        <feFlood floodColor={config.strokeColor} result="color" />
+                        <feComposite in="color" in2="outline" operator="in" result="colored-outline" />
+                        <feMerge>
+                            <feMergeNode in="colored-outline" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+            </svg>
             <div className="drag-area" onMouseDown={startDrag} />
 
             <Toolbar
@@ -760,42 +780,34 @@ export function App(): JSX.Element {
 
             <main id="lyric-content" className={isPlainLine ? "plain-content" : undefined}>
                 <div id="lyric-text-container" ref={containerRef}>
-                    {leaving && (
-                        <div key={`leave-${leaving.key}`} className="lyric-wrapper lyric-scroll-leave">
-                            <LyricLine
-                                text={leaving.text}
-                                data={leaving.data}
-                                posX={leaving.posX}
-                                tx={leaving.tx}
-                            />
-                        </div>
-                    )}
-
-                    <div key={line.key} className={`lyric-wrapper${enterClass}`}>
-                        <LyricLine
-                            text={line.text}
-                            data={line.data}
-                            posX={ktv.posX}
-                            tx={ktv.tx}
-                            lineRef={setCurrentLineEl}
-                        />
-                    </div>
+                    {[...(leaving ? [leaving] : []), line].map((renderedLine) => {
+                        const isLeaving = renderedLine !== line;
+                        const frozen = isLeaving ? renderedLine as LeavingLine : null;
+                        return (
+                            <div key={renderedLine.key}
+                                className={`lyric-wrapper${isLeaving ? " lyric-scroll-leave" : enterClass}`}>
+                                <LyricLine
+                                    text={renderedLine.text}
+                                    data={renderedLine.data}
+                                    posX={frozen ? frozen.posX : ktv.posX}
+                                    tx={frozen ? frozen.tx : ktv.tx}
+                                    lineRef={isLeaving ? undefined : setCurrentLineEl}
+                                />
+                            </div>
+                        );
+                    })}
                 </div>
 
                 {hasTrans && (
                     <div id="lyric-tran-container">
-                        {leaving && leaving.trans !== "" && (
+                        {[...(leaving && leaving.trans !== "" ? [leaving] : []), line].map((renderedLine) => (
                             <TranslationLine
-                                key={`leave-${leaving.key}`}
-                                className="lyric-tran-wrapper lyric-scroll-leave"
-                                trans={leaving.trans}
+                                key={renderedLine.key}
+                                className={`lyric-tran-wrapper${renderedLine !== line
+                                    ? " lyric-scroll-leave" : transEnterClass}`}
+                                trans={renderedLine.trans}
                             />
-                        )}
-                        <TranslationLine
-                            key={line.key}
-                            className={`lyric-tran-wrapper${transEnterClass}`}
-                            trans={line.trans}
-                        />
+                        ))}
                     </div>
                 )}
             </main>

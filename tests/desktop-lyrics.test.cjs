@@ -130,7 +130,78 @@ app.whenReady().then(async () => {
     assert.ok(wordLayout.text.right - wordLayout.text.left >
         wordLayout.container.right - wordLayout.container.left,
         'word lyrics retain large text and horizontal scrolling');
-    console.log('Desktop lyrics: playback recovery, complete static fit, resize, intro and word scrolling passed');
+
+    // Switch while horizontal scrolling/coloring are still interpolating.
+    const words = content => Array.from(content, content => ({ content, percent: 0.9 }));
+    const oldText = '保持旧行的实际显示位置与节点，不要切行重置'.repeat(2);
+    win.webContents.send('lyric:line-change', { lyricText: oldText, lyricData: words(oldText), lyricTrans: '' });
+    await delay(450);
+    win.webContents.send('lyric:line-change', { lyricText: oldText,
+        lyricData: words(oldText).map(word => ({ ...word, percent: 1 })), lyricTrans: '' });
+    await delay(40);
+    await win.webContents.executeJavaScript(`window.oldLyricNode = document.querySelector('.ktv-line')`);
+    const nextText = '下一行平滑进入';
+    win.webContents.send('lyric:line-change', { lyricText: nextText,
+        lyricData: words(nextText), lyricTrans: '' });
+    await waitFor(() => win.webContents.executeJavaScript(`Boolean(document.querySelector('.lyric-scroll-leave'))`));
+    const transition = await win.webContents.executeJavaScript(`(() => {
+        const leaving = document.querySelector('.lyric-scroll-leave .ktv-line');
+        const current = document.querySelector('.lyric-wrapper:not(.lyric-scroll-leave) .ktv-line');
+        return { sameNode: leaving === window.oldLyricNode,
+            transition: getComputedStyle(leaving).transitionDuration,
+            currentPosition: parseFloat(current.style.backgroundPositionX),
+            frozen: [getComputedStyle(leaving).transform, getComputedStyle(leaving).backgroundPositionX] };
+    })()`);
+    assert.ok(transition.sameNode, 'outgoing line keeps its DOM and compositor state');
+    assert.equal(transition.transition, '0s', 'outgoing line does not restart horizontal/color transitions');
+    assert.ok(transition.currentPosition < 20, 'new line progress is ready before entering');
+    await delay(70);
+    const frozen = await win.webContents.executeJavaScript(`(() => {
+        const style = getComputedStyle(window.oldLyricNode);
+        return [style.transform, style.backgroundPositionX];
+    })()`);
+    assert.deepEqual(frozen, transition.frozen, 'outgoing display remains frozen while sliding up');
+    await delay(400);
+    assert.equal(await win.webContents.executeJavaScript(`window.oldLyricNode.isConnected`), false,
+        'outgoing line is removed after animation');
+
+    win.webContents.send('lyric:config-changed', { strokeWidth: 4, strokeColor: '#ff0000' });
+    await delay(100);
+    const outline = await win.webContents.executeJavaScript(`(() => {
+        const style = getComputedStyle(document.querySelector('.ktv-line'));
+        return { stroke: style.webkitTextStrokeWidth, filter: style.filter };
+    })()`);
+    assert.equal(outline.stroke, '0px', 'outline never strokes the text itself');
+    assert.ok(outline.filter.includes('lyric-outline'), 'outer contour filter is enabled');
+
+    // Compare actual Chromium pixels: opaque glyph interiors stay identical,
+    // while the selected outline color appears outside the glyphs.
+    win.setSize(1000, 160);
+    win.webContents.send('lyric:config-changed', { strokeWidth: 0, pausedOpacity: 100,
+        colorActive: '#ffffff', colorInactive: '#ffffff' });
+    await win.webContents.executeJavaScript(`document.body.style.background = '#123456'`);
+    await delay(450);
+    const beforeOutline = (await win.webContents.capturePage()).toBitmap();
+    win.webContents.send('lyric:config-changed', { strokeWidth: 4 });
+    await delay(150);
+    const afterOutline = (await win.webContents.capturePage()).toBitmap();
+    assert.equal(afterOutline.length, beforeOutline.length);
+    let interiorPixels = 0;
+    let changedInterior = 0;
+    let outerPixels = 0;
+    for (let i = 0; i < beforeOutline.length; i += 4) {
+        const [b, g, r] = beforeOutline.subarray(i, i + 3);
+        if (r > 250 && g > 250 && b > 250) {
+            interiorPixels++;
+            if (!beforeOutline.subarray(i, i + 4).equals(afterOutline.subarray(i, i + 4))) changedInterior++;
+        }
+        const [outlinedB, outlinedG, outlinedR] = afterOutline.subarray(i, i + 3);
+        if (outlinedR > 200 && outlinedG < 30 && outlinedB < 30 && r < 200) outerPixels++;
+    }
+    assert.ok(interiorPixels > 100, 'test captures real glyph interiors');
+    assert.equal(changedInterior, 0, 'outer outline does not alter glyph interiors');
+    assert.ok(outerPixels > 100, 'outline is actually rendered outside the text');
+    console.log('Desktop lyrics: playback, static fit, scrolling, continuous line transitions and outer outline passed');
     win.destroy();
     app.quit();
 }).catch(error => { console.error(error); app.exit(1); });
