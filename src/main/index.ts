@@ -249,12 +249,6 @@ function setupIPC(): void {
                 trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
                 break;
             }
-            case "set-passthrough": {
-                // 锁定态解锁按钮 hover 联动:enabled=false 临时关闭穿透使按钮可点;
-                // enabled=true 时按当前 isLock 状态重新应用
-                windowManager.setLyricWindowLock(action.enabled ? config.getConfig().isLock : false);
-                break;
-            }
             case "toggle-visibility": {
                 windowManager.toggleLyricWindowVisibility();
                 trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);

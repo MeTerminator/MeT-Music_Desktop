@@ -255,11 +255,8 @@ export function createMainWindow(): BrowserWindow {
 
 export function setLyricWindowLock(isLock: boolean): void {
     if (!lyricWindow) return;
-    if (process.platform === "darwin" || process.platform === "win32") {
-        lyricWindow.setIgnoreMouseEvents(isLock, { forward: true });
-    } else {
-        lyricWindow.setIgnoreMouseEvents(isLock);
-    }
+    // 锁定时连鼠标移动也不转发，窗口只允许从设置或托盘解锁。
+    lyricWindow.setIgnoreMouseEvents(isLock, { forward: false });
 }
 
 function notifyBoundsChanged(): void {

@@ -171,6 +171,10 @@ export function App(): JSX.Element {
 
     useEffect(() => {
         configRef.current = config;
+        if (config.isLock) {
+            interactionRef.current = null;
+            setIsDragging(false);
+        }
     }, [config]);
 
     useEffect(() => {
@@ -684,22 +688,10 @@ export function App(): JSX.Element {
     const playOrPause = useCallback(() => window.desktopAPI.playerCommand("playOrPause"), []);
     const closeLyric = useCallback(() => window.desktopAPI.lyricWindow({ type: "toggle-visibility" }), []);
     const toggleLock = useCallback(() => {
+        if (configRef.current.isLock) return;
         const nextLock = !configRef.current.isLock;
         setConfig((prev) => ({ ...prev, isLock: nextLock }));
         window.desktopAPI.lyricWindow({ type: "set-lock", isLock: nextLock });
-    }, []);
-
-    // 锁定态穿透联动:darwin/win32 的 setIgnoreMouseEvents(true, {forward}) 只转发
-    // mousemove(点击仍穿透),因此解锁按钮 hover 时临时关闭穿透使其可点击。
-    // Linux/Wayland 无 forward,锁定后收不到任何鼠标事件,这两个回调天然不会触发
-    // (即保持旧行为:锁定态不显示/不响应按钮),无需按平台分支。
-    const onLockButtonEnter = useCallback(() => {
-        if (!configRef.current.isLock) return;
-        window.desktopAPI.lyricWindow({ type: "set-passthrough", enabled: false });
-    }, []);
-    const onLockButtonLeave = useCallback(() => {
-        if (!configRef.current.isLock) return;
-        window.desktopAPI.lyricWindow({ type: "set-passthrough", enabled: true });
     }, []);
 
     // ---- 样式变量(对应旧 watchEffect 写入 #app 的 CSS 变量) ----
@@ -773,8 +765,6 @@ export function App(): JSX.Element {
                 onPlayOrPause={playOrPause}
                 onPlayNext={playNext}
                 onToggleLock={toggleLock}
-                onLockMouseEnter={onLockButtonEnter}
-                onLockMouseLeave={onLockButtonLeave}
                 onClose={closeLyric}
             />
 

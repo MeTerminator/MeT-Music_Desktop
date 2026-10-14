@@ -209,39 +209,27 @@ body.wayland-native .resize-handle {
     cursor: nwse-resize;
 }
 
-/* 锁定歌词状态:窗口整体穿透(主进程 setIgnoreMouseEvents + forward) */
+/* 锁定时完全穿透，不保留工具栏或悬停反馈。 */
 #app.lock-lyric {
     cursor: none;
-    pointer-events: none;
+    pointer-events: none !important;
     -webkit-app-region: no-drag !important;
 
     * {
-        pointer-events: none;
+        pointer-events: none !important;
         -webkit-app-region: no-drag !important;
     }
 
-    & .drag-area:hover,
+    & .drag-area,
     & .resize-handle {
         opacity: 0 !important;
         background-color: transparent !important;
     }
 }
 
-/* 锁定态悬停:仅显示解锁按钮,且仅解锁按钮可点
- * (主进程 forward 鼠标事件使 hover 生效) */
-#app.lock-lyric:hover header .tools {
-    opacity: 1;
-}
-
-#app.lock-lyric header .tools .item,
-#app.lock-lyric header .tools .song-label {
+#app.lock-lyric header .tools {
+    opacity: 0 !important;
     visibility: hidden;
-}
-
-#app.lock-lyric header .tools .item.item-lock {
-    visibility: visible;
-    pointer-events: auto;
-    cursor: pointer;
 }
 
 header {

@@ -203,8 +203,6 @@ export const LyricWindowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("save-bounds"), bounds: RectSchema }),
   /** 拖动/缩放结束:main 自读 lyricWindow.getBounds() 落盘(渲染端无需回读 bounds) */
   z.object({ type: z.literal("save-current-bounds") }),
-  /** 锁定态穿透联动:解锁按钮 hover 时临时关闭鼠标穿透(enabled=true 时按当前 isLock 重新应用) */
-  z.object({ type: z.literal("set-passthrough"), enabled: z.boolean() }),
   z.object({ type: z.literal("reset-position") }),
 ]);
 export type LyricWindowAction = z.infer<typeof LyricWindowActionSchema>;

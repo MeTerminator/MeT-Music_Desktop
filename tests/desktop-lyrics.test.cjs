@@ -201,7 +201,33 @@ app.whenReady().then(async () => {
     assert.ok(interiorPixels > 100, 'test captures real glyph interiors');
     assert.equal(changedInterior, 0, 'outer outline does not alter glyph interiors');
     assert.ok(outerPixels > 100, 'outline is actually rendered outside the text');
-    console.log('Desktop lyrics: playback, static fit, scrolling, continuous line transitions and outer outline passed');
+
+    const mouseActions = [];
+    ipcMain.on('lyric:window', (_event, action) => mouseActions.push(action));
+    ipcMain.on('player:command', (_event, action) => mouseActions.push(action));
+    win.webContents.send('lyric:config-changed', { isLock: true });
+    await waitFor(() => win.webContents.executeJavaScript(`document.querySelector('#app').classList.contains('lock-lyric')`));
+    for (const [x, y] of [[20, 20], [500, 80], [970, 20], [998, 158]]) {
+        win.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+        win.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+        win.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    }
+    await delay(100);
+    const locked = await win.webContents.executeJavaScript(`(() => {
+        const tools = getComputedStyle(document.querySelector('.tools'));
+        return { opacity: tools.opacity, visibility: tools.visibility,
+            interactive: [...document.querySelectorAll('#app, #app *')]
+                .some(element => getComputedStyle(element).pointerEvents !== 'none') };
+    })()`);
+    assert.equal(locked.opacity, '0', 'locked toolbar stays hidden at every mouse position');
+    assert.equal(locked.visibility, 'hidden');
+    assert.equal(locked.interactive, false, 'locked lyrics have no mouse targets, including unlock and resize');
+    assert.deepEqual(mouseActions, [], 'locked mouse input sends no window/player commands');
+    win.webContents.send('lyric:config-changed', { isLock: false });
+    await waitFor(() => win.webContents.executeJavaScript(`!document.querySelector('#app').classList.contains('lock-lyric')`));
+    assert.equal(await win.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.item-lock')).pointerEvents`),
+        'auto', 'external config unlock restores interaction');
+    console.log('Desktop lyrics: playback, fitting, transitions, outline and complete mouse lock passed');
     win.destroy();
     app.quit();
 }).catch(error => { console.error(error); app.exit(1); });
