@@ -296,7 +296,9 @@ export function createLyricWindow(): BrowserWindow {
         webPreferences: {
             preload: path.join(__dirname, "..", "preload", "local-window.js"),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            // 歌词在非焦点/被遮挡的桌面窗口中仍需推进本地时钟和 rAF 染色。
+            backgroundThrottling: false
         }
     };
 

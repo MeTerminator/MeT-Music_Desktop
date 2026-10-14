@@ -8,7 +8,7 @@ import {
     type MouseEvent as ReactMouseEvent,
 } from "react";
 import { defaultLyricConfig, type LyricConfig, type LyricLineEvent } from "@shared/ipc";
-import { hexToRgba } from "@renderer/shared/color";
+import { coverThemeLyricColor, hexToRgba } from "@renderer/shared/color";
 import { Toolbar } from "./Toolbar";
 import type { SongSync, PlaybackSync } from "@shared/hook-contract";
 import { anchorProgress, clockPosition, lyricAt } from "@shared/playback-clock";
@@ -248,6 +248,8 @@ export function App(): JSX.Element {
     useEffect(() => {
         return () => {
             if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+            // StrictMode 会在首次挂载时清理并重跑 effect；被取消的帧不再是待执行帧。
+            rafRef.current = null;
         };
     }, []);
 
@@ -318,7 +320,8 @@ export function App(): JSX.Element {
 
     useEffect(() => {
         let timer: ReturnType<typeof setInterval> | null = null;
-        let received = false;
+        let disposed = false;
+        let loadingSnapshot = false;
         let pendingProgress: PlaybackSync | null = null;
         const render = () => {
             const song = syncSongRef.current;
@@ -334,9 +337,10 @@ export function App(): JSX.Element {
             }
             if (syncSongRef.current?.revision !== data.revision) {
                 pendingProgress = data;
+                void restoreSnapshot();
                 return;
             }
-            received = true;
+            pendingProgress = null;
             syncAnchorRef.current = anchorProgress(data);
             setIsPlaying(data.isPlaying);
             if (timer) clearInterval(timer);
@@ -344,15 +348,27 @@ export function App(): JSX.Element {
             render();
             if (data.isPlaying) timer = setInterval(render, 1000 / 30);
         };
+        // 完整快照可能在窗口加载/旧 Hook 交接时丢失。进度包没有字时间轴，
+        // 必须重新取主进程缓存，而不能永远等下一次歌曲变化才恢复逐字染色。
+        const restoreSnapshot = async () => {
+            if (loadingSnapshot || disposed) return;
+            loadingSnapshot = true;
+            try {
+                const state = await window.desktopAPI.getPlaybackSync();
+                if (disposed || !state || (syncAnchorRef.current && !pendingProgress)) return;
+                const pending = pendingProgress;
+                if (pending && pending.revision !== state.song.revision) return;
+                receive(state.song);
+                receive(pending && pending.timestamp >= state.progress.timestamp
+                    ? pending : state.progress);
+            } catch {
+                // 下一个进度包会重试；旧 Hook 模式仍可正常渲染。
+            } finally {
+                loadingSnapshot = false;
+            }
+        };
         const unsubscribe = window.desktopAPI.onPlaybackSync(receive);
-        let disposed = false;
-        void window.desktopAPI.getPlaybackSync().then((state) => {
-            if (disposed || received || !state) return;
-            const pending = pendingProgress;
-            receive(state.song);
-            receive(pending && pending.revision === state.song.revision
-                && pending.timestamp >= state.progress.timestamp ? pending : state.progress);
-        }).catch(() => undefined);
+        void restoreSnapshot();
         return () => {
             disposed = true;
             unsubscribe();
@@ -633,9 +649,7 @@ export function App(): JSX.Element {
 
     const activeColor = (() => {
         if (config.useThemeColorForActive) {
-            const shadeTwo = coverTheme?.light?.shadeTwo;
-            if (shadeTwo) return `rgba(${shadeTwo}, 0.95)`;
-            return "#efefef95";
+            return coverThemeLyricColor(coverTheme?.light?.shadeTwo) ?? "#efefef95";
         }
         return config.colorActive;
     })();
