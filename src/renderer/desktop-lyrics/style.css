@@ -16,9 +16,8 @@
     --main-color: #ffffff;
     --resize-border-width: 6px;
     --color-active: #ffffff;
-    --color-inactive: rgba(255, 255, 255, 0.3);
+    --color-inactive: rgba(255, 255, 255, 1);
     --hover-bg-color: rgba(0, 0, 0, 0.2);
-    --hover-bg-blur: 10px;
     --lyric-stroke-width: 1px;
     --lyric-stroke-color: #000000;
 }
@@ -61,11 +60,10 @@ body {
     height: 100%;
     border-radius: 16px;
     background-color: transparent;
-    backdrop-filter: blur(0);
     z-index: 0;
     opacity: 1;
     cursor: grab;
-    transition: background-color 0.3s, backdrop-filter 0.3s;
+    transition: background-color 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -81,7 +79,6 @@ body {
 
 #app:hover .drag-area {
     background-color: var(--hover-bg-color);
-    backdrop-filter: blur(var(--hover-bg-blur));
     cursor: grab;
 }
 
@@ -228,7 +225,6 @@ body.wayland-native .resize-handle {
     & .resize-handle {
         opacity: 0 !important;
         background-color: transparent !important;
-        backdrop-filter: blur(0) !important;
     }
 }
 
@@ -256,7 +252,6 @@ header {
     .tools {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         opacity: 0;
         transition: opacity 0.3s;
 
@@ -265,6 +260,10 @@ header {
             align-items: center;
             gap: 8px;
             margin: 0 4px;
+
+            &.playback-controls {
+                margin-left: auto;
+            }
 
             .item {
                 display: flex;
@@ -350,12 +349,27 @@ main {
     font-family: var(--lyric-font-family);
     font-weight: var(--lyric-font-weight);
     display: inline-block;
+    flex-shrink: 0;
     white-space: nowrap;
     line-height: 1.35;
     will-change: transform;
     transition: transform 0.2s linear;
     paint-order: stroke fill;
     -webkit-text-stroke: var(--lyric-stroke-width) var(--lyric-stroke-color);
+}
+
+/* 静态歌词整体居中，字号按主行和译文的实际宽高适配。 */
+.plain-content #lyric-text-container {
+    flex: none;
+    overflow: visible;
+}
+
+.plain-content #lyric-tran-container {
+    overflow: visible;
+}
+
+.plain-content .lyric-wrapper {
+    height: auto;
 }
 
 .ktv-line {

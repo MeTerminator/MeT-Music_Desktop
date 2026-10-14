@@ -1,6 +1,7 @@
 import {
     useCallback,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type CSSProperties,
@@ -298,7 +299,7 @@ export function App(): JSX.Element {
                 setKtv({ posX: ktvBackgroundPositionX(0), tx: 0 });
                 lineStateRef.current = nextLine;
                 setLine(nextLine);
-                setLeaving(snapshot);
+                setLeaving(cur.data.length > 0 && nextData.length > 0 ? snapshot : null);
                 // 封面主题只在行切换时刷新(IPC 每 tick 都是新对象,逐 tick 深比较不值得;
                 // 同为 null 时 React 按引用相等跳过重渲染)
                 setCoverTheme(data.coverTheme ?? null);
@@ -407,6 +408,59 @@ export function App(): JSX.Element {
 
     const lyricFontFamily = config.lyricFontFamily?.trim() || "inherit";
     const translationFontFamily = config.translationFontFamily?.trim() || "inherit";
+
+    // LRC 和前奏歌曲信息没有逐字进度可供滚动，主行与译文必须同时完整放下。
+    const isPlainLine = line.data.length === 0;
+    useLayoutEffect(() => {
+        const main = containerRef.current?.parentElement;
+        if (!main) return;
+        if (!isPlainLine) {
+            main.style.removeProperty("--lyric-font-size");
+            main.style.removeProperty("--trans-font-size");
+            return;
+        }
+
+        const fit = () => {
+            const text = currentLineElRef.current;
+            const container = containerRef.current;
+            if (!text || !container) return;
+            const translation = main.querySelector<HTMLElement>("#lyric-tran");
+            // 留出描边和取整余量，避免字形边缘被 overflow:hidden 裁掉。
+            const clearance = Math.ceil(config.strokeWidth) + 2;
+            const width = Math.max(0, container.clientWidth - clearance * 2);
+            const height = Math.max(0, main.clientHeight - clearance * 2);
+            const applyScale = (scale: number) => {
+                main.style.setProperty("--lyric-font-size", `${computedFontSize * scale}px`);
+                main.style.setProperty("--trans-font-size", `${computedTransFontSize * scale}px`);
+            };
+            const fits = () => text.scrollWidth <= width
+                && (!translation || translation.scrollWidth <= width)
+                && text.offsetHeight + (translation ? translation.offsetHeight + 4 : 0) <= height;
+
+            applyScale(1);
+            if (fits()) return;
+            // 测量实际字体而非估算字符宽度；两行共用比例，保留译文字号设置。
+            let low = 0;
+            let high = 1;
+            for (let i = 0; i < 14; i++) {
+                const mid = (low + high) / 2;
+                applyScale(mid);
+                if (fits()) low = mid;
+                else high = mid;
+            }
+            applyScale(low);
+        };
+        fit();
+        const observer = new ResizeObserver(fit);
+        observer.observe(main);
+        document.fonts.addEventListener("loadingdone", fit);
+        return () => {
+            observer.disconnect();
+            document.fonts.removeEventListener("loadingdone", fit);
+        };
+    }, [isPlainLine, line.text, line.trans, hasTrans, computedFontSize, computedTransFontSize,
+        lyricFontFamily, translationFontFamily, config.lyricFontWeight,
+        config.translationFontWeight, config.strokeWidth]);
 
     /** 字号/字体/字重变化会使已测量的 KTV 布局失效(对应旧 layoutStyleSignature) */
     useEffect(() => {
@@ -654,8 +708,8 @@ export function App(): JSX.Element {
         return config.colorActive;
     })();
 
-    const baseOpacity = isPlaying ? 1 : (config.pausedOpacity ?? 30) / 100;
-    const appOpacity = ((baseOpacity * (config.overallOpacity || 100)) / 100).toFixed(2);
+    const baseOpacity = isPlaying ? 1 : (config.pausedOpacity ?? 50) / 100;
+    const appOpacity = ((baseOpacity * (config.overallOpacity ?? 100)) / 100).toFixed(2);
 
     const appStyle = {
         "--lyric-font-size": `${computedFontSize}px`,
@@ -670,7 +724,6 @@ export function App(): JSX.Element {
         "--lyric-stroke-width": `${config.strokeWidth}px`,
         "--lyric-stroke-color": config.strokeColor,
         "--hover-bg-color": config.bgColor,
-        "--hover-bg-blur": `${config.bgBlur}px`,
         opacity: appOpacity,
     } as CSSProperties;
 
@@ -705,7 +758,7 @@ export function App(): JSX.Element {
                 onClose={closeLyric}
             />
 
-            <main id="lyric-content">
+            <main id="lyric-content" className={isPlainLine ? "plain-content" : undefined}>
                 <div id="lyric-text-container" ref={containerRef}>
                     {leaving && (
                         <div key={`leave-${leaving.key}`} className="lyric-wrapper lyric-scroll-leave">

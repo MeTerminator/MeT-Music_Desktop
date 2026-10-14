@@ -285,6 +285,8 @@ export function createLyricWindow(): BrowserWindow {
         y: finalY,
         frame: false,
         transparent: true,
+        // 透明窗口的系统阴影会沿歌词字形投影，关闭以保持文字边缘干净。
+        hasShadow: false,
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: true,

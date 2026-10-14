@@ -34,11 +34,10 @@ export const LyricConfigSchema = z.object({
   translationFontWeight: z.number().default(400),
   textColor: z.string().default("#ffffff"),
   colorActive: z.string().default("#ffffff"),
-  colorInactive: z.string().default("rgba(255, 255, 255, 0.3)"),
+  colorInactive: z.string().default("rgba(255, 255, 255, 1)"),
   showTranslation: z.boolean().default(false),
   isLock: z.boolean().default(false),
   bgColor: z.string().default("rgba(0, 0, 0, 0.2)"),
-  bgBlur: z.number().default(10),
   useThemeColorForActive: z.boolean().default(true),
   textOpacity: z.number().default(100),
   strokeWidth: z.number().default(0),
@@ -47,9 +46,9 @@ export const LyricConfigSchema = z.object({
   windowY: z.number().nullable().default(null),
   windowWidth: z.number().nullable().default(null),
   windowHeight: z.number().nullable().default(null),
-  overallOpacity: z.number().default(90),
+  overallOpacity: z.number().default(100),
   transFontSizeScale: z.number().default(23),
-  pausedOpacity: z.number().default(30),
+  pausedOpacity: z.number().default(50),
 });
 export type LyricConfig = z.infer<typeof LyricConfigSchema>;
 export const defaultLyricConfig = (): LyricConfig => LyricConfigSchema.parse({});

@@ -14,7 +14,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('lyric:playback-get', () => { reads++; return snapshot; });
     ipcMain.handle('app:info', () => ({ isWayland: false }));
     ipcMain.handle('lyric:config-get', () => ({ useThemeColorForActive: false }));
-    const win = new BrowserWindow({ show: false, width: 1000, height: 160,
+    const win = new BrowserWindow({ show: false, frame: false, width: 1000, height: 160,
         webPreferences: { backgroundThrottling: false,
             preload: path.resolve('out/preload/local-window.js') } });
     if (process.env.METMUSIC_LYRICS_TEST_URL) {
@@ -68,7 +68,69 @@ app.whenReady().then(async () => {
     win.webContents.send('lyric:playback-sync', { ...snapshot.progress, currentTime: 1,
         timestamp: Date.now() });
     await waitFor(async () => await position() > paused + 30);
-    console.log('Desktop lyrics: local coloring, legacy recovery, revision recovery, pause and seek passed');
+
+    const layout = () => win.webContents.executeJavaScript(`(() => {
+        const main = document.querySelector('main');
+        const container = document.querySelector('#lyric-text-container');
+        const text = document.querySelector('.lyric-wrapper:not(.lyric-scroll-leave) > div');
+        const translation = document.querySelector('.lyric-tran-wrapper:not(.lyric-scroll-leave) > div');
+        const bounds = element => {
+            const { left, right, top, bottom } = element.getBoundingClientRect();
+            return { left, right, top, bottom };
+        };
+        return { plain: main.classList.contains('plain-content'), main: bounds(main),
+            container: bounds(container), text: bounds(text),
+            translation: translation && bounds(translation),
+            fontSize: parseFloat(getComputedStyle(text).fontSize),
+            tx: text.style.transform, animation: text.parentElement.getAnimations().length };
+    })()`);
+    const assertFits = async () => {
+        const result = await layout();
+        assert.ok(result.plain, 'static text uses complete-fit layout');
+        for (const rect of [result.text, result.translation].filter(Boolean)) {
+            assert.ok(rect.left >= result.container.left && rect.right <= result.container.right,
+                'complete text fits horizontally');
+            assert.ok(rect.top >= result.main.top && rect.bottom <= result.main.bottom,
+                'main text and translation fit vertically');
+        }
+        assert.equal(result.tx, 'translateX(0px)', 'static text does not pan');
+        assert.equal(result.animation, 0, 'static text does not flip');
+        return result;
+    };
+    win.webContents.send('lyric:config-changed', { showTranslation: true });
+    const longText = '这是一行需要完整显示而不能裁切的普通歌词'.repeat(3);
+    win.webContents.send('lyric:line-change', { lyricText: longText, lyricData: [],
+        lyricTrans: 'A much longer translation that also needs to fit entirely. '.repeat(5) });
+    await waitFor(async () => (await layout()).plain);
+    await delay(450);
+    const wide = await assertFits();
+    win.setSize(300, 160);
+    await delay(150);
+    const narrow = await assertFits();
+    assert.ok(narrow.fontSize < wide.fontSize, 'width-only resize refits static text');
+    win.setSize(300, 70);
+    await delay(150);
+    await assertFits();
+    win.setSize(100, 50);
+    await delay(150);
+    await assertFits();
+
+    // Intro information in a song with word timings still uses the static layout.
+    const introSong = { ...song, revision: 3, currentTime: 0, isPlaying: false,
+        timestamp: Date.now(), songName: longText, songArtist: 'Artist',
+        lyrics: song.lyrics.map(line => ({ ...line, time: 5000 })) };
+    win.webContents.send('lyric:playback-sync', introSong);
+    await delay(150);
+    await assertFits();
+    win.setSize(300, 160);
+    win.webContents.send('lyric:playback-sync', { ...introSong, kind: 'progress',
+        currentTime: 6, timestamp: Date.now() });
+    await waitFor(async () => !(await layout()).plain);
+    const wordLayout = await layout();
+    assert.ok(wordLayout.text.right - wordLayout.text.left >
+        wordLayout.container.right - wordLayout.container.left,
+        'word lyrics retain large text and horizontal scrolling');
+    console.log('Desktop lyrics: playback recovery, complete static fit, resize, intro and word scrolling passed');
     win.destroy();
     app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

@@ -138,7 +138,7 @@ export function Toolbar({
                     )}
                 </div>
 
-                <div className="item-section">
+                <div className="item-section playback-controls">
                     <div className="item" title="上一首" onClick={onPlayPrev}>
                         {PrevIcon}
                     </div>

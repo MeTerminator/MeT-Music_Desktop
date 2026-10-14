@@ -412,7 +412,7 @@ export default function App(): React.JSX.Element {
   /* ---- 派生渲染值 ---- */
 
   // 颜色选择器值直接从 config 派生(colorInactive / bgColor 为 rgba 字符串;解析失败回退默认)
-  const inactiveDerived = parseInactiveColor(config.colorInactive) ?? { hex: "#ffffff", opacity: 30 };
+  const inactiveDerived = parseInactiveColor(config.colorInactive) ?? { hex: "#ffffff", opacity: 100 };
   const inactiveColorHex = inactiveDerived.hex;
   const inactiveOpacity = inactiveDerived.opacity;
   const bgColorHex = parseBgColor(config.bgColor) ?? "#000000";
@@ -659,18 +659,6 @@ export default function App(): React.JSX.Element {
                 />
               </div>
               <div className="setting-item">
-                <label>悬停模糊度 ({config.bgBlur}px)</label>
-                <div className="range-wrapper">
-                  <input
-                    type="range"
-                    min={0}
-                    max={30}
-                    value={config.bgBlur}
-                    onChange={(e) => patchConfig({ bgBlur: e.currentTarget.valueAsNumber })}
-                  />
-                </div>
-              </div>
-              <div className="setting-item">
                 <label>总体不透明度 ({config.overallOpacity}%)</label>
                 <div className="range-wrapper">
                   <input
@@ -754,9 +742,8 @@ export default function App(): React.JSX.Element {
                 </div>
                 <div className="drag-pad-wrapper" ref={padRef} onMouseDown={onPadMouseDown}>
                   <div className="drag-pad-screen">
-                    <div className="drag-pad-handle" style={padHandleStyle}>
+                    <div className="drag-pad-handle" style={padHandleStyle} title="拖拽圆点调整歌词位置">
                       <span className="handle-pulse"></span>
-                      <span className="handle-label">歌词</span>
                     </div>
                   </div>
                 </div>
