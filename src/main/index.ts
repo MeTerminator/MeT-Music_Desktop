@@ -18,11 +18,15 @@ import {
 } from "../shared/ipc";
 import {
     HOOK_MIN_INTERVAL_MS,
+    PlaybackSyncSchema,
+    type PlaybackSync,
+    type SongSync,
     type CoverTheme,
     type LyricsSnapshot,
     type NowPlaying,
     type PlaybackSnapshot
 } from "../shared/hook-contract";
+import { anchorProgress, clockPosition, lyricAt } from "../shared/playback-clock";
 import * as config from "./config";
 import * as apiConfig from "./api-config";
 import * as appConfig from "./app-config";
@@ -57,6 +61,9 @@ let currentSong: HookPayload = {
     lyricData: [],
     isPlaying: false
 };
+
+let syncedSong: SongSync | null = null;
+let syncedProgress: PlaybackSync | null = null;
 
 interface PendingLyricUpdate {
     lyricText: string;
@@ -112,6 +119,32 @@ function scheduleLyricUpdate(data: HookPayload): void {
 }
 
 function setupIPC(): void {
+    ipcMain.handle(CH.playbackSyncGet, () => syncedSong && syncedProgress
+        ? { song: syncedSong, progress: syncedProgress } : null);
+    ipcMain.on(CH.playbackSync, (_event, raw: unknown) => {
+        const parsed = PlaybackSyncSchema.safeParse(raw);
+        if (!parsed.success) {
+            console.warn("[ipc] Invalid playback sync:", parsed.error.message);
+            return;
+        }
+        const data = parsed.data;
+        if (data.kind === "song") syncedSong = data;
+        if (!syncedSong || data.revision !== syncedSong.revision) return;
+        syncedProgress = data;
+        if (lyricUpdateTimer) clearTimeout(lyricUpdateTimer);
+        lyricUpdateTimer = null;
+        pendingLyricUpdate = null;
+        const position = clockPosition(anchorProgress(data));
+        currentSong = { ...(data.kind === "song" ? data : currentSong), ...data,
+            currentTime: position, ...lyricAt(syncedSong, position),
+            coverTheme: syncedSong.coverTheme };
+        broadcastPlaybackEvents(currentSong);
+        trayManager.updateTrayMenu(currentSong, playPrev, playNext, playOrPause);
+        trayManager.updateTrayProgress(currentSong);
+        mediaManager.update(currentSong);
+        const win = windowManager.getLyricWindow();
+        if (win && !win.isDestroyed()) win.webContents.send(CH.evPlaybackSync, data);
+    });
     ipcMain.on(CH.hookState, (_event, data: HookPayload) => {
         // 契约 v2:仅在 dev 校验并告警,生产直接透传(hook 高频调用,不做丢弃)。
         if (!app.isPackaged) {
@@ -121,6 +154,8 @@ function setupIPC(): void {
             }
         }
 
+        syncedSong = null;
+        syncedProgress = null;
         currentSong = { ...currentSong, ...data };
         broadcastPlaybackEvents(currentSong);
         const lyricWindow = windowManager.getLyricWindow();
@@ -537,7 +572,11 @@ app.whenReady().then(() => {
     appConfig.loadConfig();
     // 歌词窗隐藏期间 flush 会保留 pending,重新可见时补发最后一次歌词行
     windowManager.setOnLyricWindowShow(() => {
-        if (pendingLyricUpdate) flushLyricUpdate();
+        if (syncedSong && syncedProgress) {
+            const win = windowManager.getLyricWindow();
+            win?.webContents.send(CH.evPlaybackSync, syncedSong);
+            win?.webContents.send(CH.evPlaybackSync, syncedProgress);
+        } else if (pendingLyricUpdate) flushLyricUpdate();
     });
     windowManager.createMainWindow();
     windowManager.createLyricWindow();

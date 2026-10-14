@@ -6,6 +6,7 @@ import type { MainWindowAPI, WindowControl } from "../shared/ipc";
 import type { HookPayload } from "../shared/hook-contract";
 
 const api: MainWindowAPI = {
+    sendPlaybackSync: (data) => ipcRenderer.send(CH.playbackSync, data),
     sendHookData: (data: HookPayload) => ipcRenderer.send(CH.hookState, data),
     hideWindow: () => ipcRenderer.send(CH.windowControl, { action: "hide-main" } satisfies WindowControl),
     openSettings: () => ipcRenderer.send(CH.windowControl, { action: "open-settings" } satisfies WindowControl),

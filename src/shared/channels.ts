@@ -6,6 +6,9 @@
 
 export const CH = {
   /** 主窗 preload → main:播放状态 hook 转发(旧 metmusic-hook) */
+  playbackSync: "hook:playback-sync",
+  playbackSyncGet: "lyric:playback-get",
+  evPlaybackSync: "lyric:playback-sync",
   hookState: "hook:state",
   /** 歌词/设置窗 → main:播放控制(旧 play-prev / play-next / play-or-pause) */
   playerCommand: "player:command",

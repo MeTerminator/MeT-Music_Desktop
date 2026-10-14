@@ -28,6 +28,8 @@ function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => voi
 }
 
 const api: DesktopAPI = {
+    getPlaybackSync: () => ipcRenderer.invoke(CH.playbackSyncGet),
+    onPlaybackSync: (cb) => subscribe(CH.evPlaybackSync, cb),
     // invoke
     getAppInfo: () => ipcRenderer.invoke(CH.appInfo) as Promise<AppInfo>,
     getLyricBounds: () => ipcRenderer.invoke(CH.lyricBoundsGet) as Promise<Rect>,

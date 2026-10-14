@@ -10,6 +10,8 @@ import {
 import { defaultLyricConfig, type LyricConfig, type LyricLineEvent } from "@shared/ipc";
 import { hexToRgba } from "@renderer/shared/color";
 import { Toolbar } from "./Toolbar";
+import type { SongSync, PlaybackSync } from "@shared/hook-contract";
+import { anchorProgress, clockPosition, lyricAt } from "@shared/playback-clock";
 
 type LyricWord = LyricLineEvent["lyricData"][number];
 type CoverTheme = LyricLineEvent["coverTheme"];
@@ -155,6 +157,9 @@ export function App(): JSX.Element {
     const lineStateRef = useRef<LineState>(INITIAL_LINE);
     const latestDataRef = useRef<LyricWord[]>([]);
     const lineSigRef = useRef("");
+    const lineIdRef = useRef<string | undefined>(undefined);
+    const syncSongRef = useRef<SongSync | null>(null);
+    const syncAnchorRef = useRef<ReturnType<typeof anchorProgress> | null>(null);
     const prevProgressRef = useRef<number | null>(null);
     const ktvRef = useRef({ percent: 0, tx: 0 });
     const metricsRef = useRef<KtvMetrics | null>(null);
@@ -266,7 +271,9 @@ export function App(): JSX.Element {
                 prevProgressRef.current !== null &&
                 nextProgress !== null &&
                 nextProgress + 0.05 < prevProgressRef.current;
-            const lineChanged = textChanged || structureChanged || repeatedTextStartedNewLine;
+            const lineChanged = textChanged || structureChanged || (data.lineId !== undefined
+                ? data.lineId !== lineIdRef.current : repeatedTextStartedNewLine);
+            lineIdRef.current = data.lineId;
 
             latestDataRef.current = nextData;
 
@@ -308,6 +315,50 @@ export function App(): JSX.Element {
         },
         [scheduleKtvUpdate]
     );
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setInterval> | null = null;
+        let received = false;
+        let pendingProgress: PlaybackSync | null = null;
+        const render = () => {
+            const song = syncSongRef.current;
+            const anchor = syncAnchorRef.current;
+            if (!song || !anchor) return;
+            handleLyricChange(lyricAt(song, clockPosition(anchor)));
+        };
+        const receive = (data: PlaybackSync) => {
+            if (data.kind === "song") {
+                syncSongRef.current = data;
+                setSongLabel(`${data.songName} - ${data.songArtist}`);
+                setCoverTheme(data.coverTheme ?? null);
+            }
+            if (syncSongRef.current?.revision !== data.revision) {
+                pendingProgress = data;
+                return;
+            }
+            received = true;
+            syncAnchorRef.current = anchorProgress(data);
+            setIsPlaying(data.isPlaying);
+            if (timer) clearInterval(timer);
+            timer = null;
+            render();
+            if (data.isPlaying) timer = setInterval(render, 1000 / 30);
+        };
+        const unsubscribe = window.desktopAPI.onPlaybackSync(receive);
+        let disposed = false;
+        void window.desktopAPI.getPlaybackSync().then((state) => {
+            if (disposed || received || !state) return;
+            const pending = pendingProgress;
+            receive(state.song);
+            receive(pending && pending.revision === state.song.revision
+                && pending.timestamp >= state.progress.timestamp ? pending : state.progress);
+        }).catch(() => undefined);
+        return () => {
+            disposed = true;
+            unsubscribe();
+            if (timer) clearInterval(timer);
+        };
+    }, [handleLyricChange]);
 
     /** 行切换后:渲染完成再测量新行布局(对应旧 nextTick(scheduleKtvProgressUpdate)) */
     useEffect(() => {
@@ -369,7 +420,11 @@ export function App(): JSX.Element {
             }
         });
 
-        unsubs.push(window.desktopAPI.onLyricChange(handleLyricChange));
+        unsubs.push(window.desktopAPI.onLyricChange((data) => {
+            syncSongRef.current = null;
+            syncAnchorRef.current = null;
+            handleLyricChange(data);
+        }));
         unsubs.push(window.desktopAPI.onStatusChange((state) => setIsPlaying(Boolean(state))));
         unsubs.push(
             window.desktopAPI.onConfigChanged((newConfig) => {

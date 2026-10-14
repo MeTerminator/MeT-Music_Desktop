@@ -234,6 +234,7 @@ export function createMainWindow(): BrowserWindow {
         const inject = `
             window.$MeTMusic_Hook = (d) => window.electronAPI.sendHookData(d);
             window.$MeTMusic_registerHost({
+                onPlaybackSync: (d) => window.electronAPI.sendPlaybackSync(d),
                 onOpenSettings: () => window.electronAPI.openSettings(),
                 onHideWindow: () => window.electronAPI.hideWindow(),
                 // 无边框主窗的窗口按钮(契约里全是可选项)

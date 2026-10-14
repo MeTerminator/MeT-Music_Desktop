@@ -9,6 +9,8 @@ import {
   HookPayloadSchema,
   WordProgressSchema,
   type HookPayload,
+  type PlaybackSync,
+  type SongSync,
 } from "./hook-contract";
 
 export { HookPayloadSchema, type HookPayload };
@@ -212,6 +214,7 @@ export type LyricWindowAction = z.infer<typeof LyricWindowActionSchema>;
  *  showTranslation=false 时 main 侧清空 lyricTrans,行为与旧实现一致;
  *  lyricData / coverTheme 直接派生自 hook-contract,两端类型统一) */
 export const LyricLineEventSchema = z.object({
+  lineId: z.string().optional(),
   lyricText: z.string(),
   lyricData: z.array(WordProgressSchema),
   lyricTrans: z.string(),
@@ -229,6 +232,7 @@ export interface AppInfo {
 /** 主窗 preload(远程 UI 使用) */
 export interface MainWindowAPI {
   sendHookData(data: HookPayload): void;
+  sendPlaybackSync(data: PlaybackSync): void;
   hideWindow(): void;
   openSettings(): void;
   /* 窗口控制(无边框主窗的最小化/最大化/关闭,由 UI 顶栏按钮触发) */
@@ -241,6 +245,8 @@ export interface MainWindowAPI {
 export interface DesktopAPI {
   // invoke
   getAppInfo(): Promise<AppInfo>;
+  getPlaybackSync(): Promise<{ song: SongSync; progress: PlaybackSync } | null>;
+  onPlaybackSync(cb: (data: PlaybackSync) => void): () => void;
   getLyricBounds(): Promise<Rect>;
   getLyricConfig(): Promise<LyricConfig>;
   getExternalApiConfig(): Promise<ExternalApiConfig>;

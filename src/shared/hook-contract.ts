@@ -172,6 +172,34 @@ export const LyricsSnapshotSchema = z.object({
 });
 export type LyricsSnapshot = z.infer<typeof LyricsSnapshotSchema>;
 
+/** 增量同步为可选能力，旧 Hook 的版本和字段保持兼容。时间戳为 Unix 毫秒。 */
+export const PLAYBACK_SYNC_INTERVAL_MS = 500;
+export const PlaybackProgressSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  currentTime: z.number().nonnegative(), // 秒
+  duration: z.number().nonnegative(), // 秒
+  timestamp: z.number(),
+  isPlaying: z.boolean(),
+  playbackRate: z.number().positive(),
+});
+export const SongSyncSchema = HookPayloadSchema.extend({
+  kind: z.literal("song"),
+  ...PlaybackProgressSchema.shape,
+  songAlbum: z.string().optional(),
+  lyrics: z.array(LyricLineSchema),
+  /** 行选择与逐字进度偏移分别保留；单位毫秒。 */
+  lineOffset: z.number(),
+  wordOffset: z.number(),
+  inclusive: z.boolean(),
+});
+export const PlaybackSyncSchema = z.discriminatedUnion("kind", [
+  SongSyncSchema,
+  PlaybackProgressSchema.extend({ kind: z.literal("progress") }),
+]);
+export type SongSync = z.infer<typeof SongSyncSchema>;
+export type PlaybackSync = z.infer<typeof PlaybackSyncSchema>;
+export type PlaybackProgress = z.infer<typeof PlaybackProgressSchema>;
+
 /**
  * 宿主注册接口(v2 新增)。
  * App 在注入 $MeTMusic_Hook 的同时调用 $MeTMusic_registerHost;
@@ -181,6 +209,8 @@ export type LyricsSnapshot = z.infer<typeof LyricsSnapshotSchema>;
 const hostCallback = () => z.custom<() => void>((v) => typeof v === "function").optional();
 
 export const HostCallbacksSchema = z.object({
+  /** 存在时启用整曲 + 低频进度同步，替代高频 Hook。注册时立即发送整曲。 */
+  onPlaybackSync: z.custom<(data: PlaybackSync) => void>((v) => typeof v === "function").optional(),
   /** 用户点击 UI 内"客户端设置"按钮(打开客户端设置窗) */
   onOpenSettings: hostCallback(),
   /** 用户点击 UI 内"隐藏"按钮(主窗隐藏到托盘) */
