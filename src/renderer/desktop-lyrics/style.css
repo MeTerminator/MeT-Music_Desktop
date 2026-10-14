@@ -374,7 +374,7 @@ main {
     will-change: background-position-x, transform;
     white-space: nowrap;
     line-height: 1.35;
-    transition: background-position-x 0.2s linear, transform 0.2s linear;
+    transition: background-position-x 0.1s linear, transform 0.1s linear;
     filter: var(--lyric-outline-filter);
 }
 
