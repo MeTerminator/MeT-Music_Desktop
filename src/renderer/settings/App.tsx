@@ -598,13 +598,22 @@ export default function App(): React.JSX.Element {
                 </div>
               )}
               <div className="setting-item flex-row">
-                <label>KTV 底色颜色</label>
-                <input
-                  type="color"
-                  value={inactiveColorHex}
-                  onChange={(e) => updateInactiveColor(e.target.value, inactiveOpacity)}
+                <label>底色颜色使用歌曲主题色</label>
+                <Switch
+                  checked={config.useThemeColorForInactive}
+                  onChange={(value) => patchConfig({ useThemeColorForInactive: value })}
                 />
               </div>
+              {!config.useThemeColorForInactive && (
+                <div className="setting-item flex-row">
+                  <label>KTV 底色颜色</label>
+                  <input
+                    type="color"
+                    value={inactiveColorHex}
+                    onChange={(e) => updateInactiveColor(e.target.value, inactiveOpacity)}
+                  />
+                </div>
+              )}
               <div className="setting-item">
                 <label>KTV 底色不透明度 ({inactiveOpacity}%)</label>
                 <div className="range-wrapper">

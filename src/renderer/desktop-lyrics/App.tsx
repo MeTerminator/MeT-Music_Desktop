@@ -9,7 +9,7 @@ import {
     type MouseEvent as ReactMouseEvent,
 } from "react";
 import { defaultLyricConfig, type LyricConfig, type LyricLineEvent } from "@shared/ipc";
-import { coverThemeLyricColor, hexToRgba } from "@renderer/shared/color";
+import { colorOpacity, coverThemeLyricColor, hexToRgba } from "@renderer/shared/color";
 import { Toolbar } from "./Toolbar";
 import type { SongSync, PlaybackSync } from "@shared/hook-contract";
 import { anchorProgress, clockPosition, lyricAt } from "@shared/playback-clock";
@@ -703,6 +703,11 @@ export function App(): JSX.Element {
         return config.colorActive;
     })();
 
+    const inactiveColor = config.useThemeColorForInactive
+        ? coverThemeLyricColor(coverTheme?.light?.shadeTwo, colorOpacity(config.colorInactive))
+            ?? config.colorInactive
+        : config.colorInactive;
+
     const baseOpacity = isPlaying ? 1 : (config.pausedOpacity ?? 50) / 100;
     const appOpacity = ((baseOpacity * (config.overallOpacity ?? 100)) / 100).toFixed(2);
 
@@ -715,7 +720,7 @@ export function App(): JSX.Element {
         "--translation-font-weight": String(config.translationFontWeight ?? 400),
         "--main-color": hexToRgba(config.textColor, config.textOpacity),
         "--color-active": activeColor,
-        "--color-inactive": config.colorInactive,
+        "--color-inactive": inactiveColor,
         "--lyric-outline-filter": config.strokeWidth > 0 ? "url(#lyric-outline)" : "none",
         "--hover-bg-color": config.bgColor,
         opacity: appOpacity,

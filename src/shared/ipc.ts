@@ -39,6 +39,7 @@ export const LyricConfigSchema = z.object({
   isLock: z.boolean().default(false),
   bgColor: z.string().default("rgba(0, 0, 0, 0.2)"),
   useThemeColorForActive: z.boolean().default(true),
+  useThemeColorForInactive: z.boolean().default(false),
   textOpacity: z.number().default(100),
   strokeWidth: z.number().default(0),
   strokeColor: z.string().default("#000000"),

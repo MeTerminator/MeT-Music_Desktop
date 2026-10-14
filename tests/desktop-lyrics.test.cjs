@@ -202,6 +202,23 @@ app.whenReady().then(async () => {
     assert.equal(changedInterior, 0, 'outer outline does not alter glyph interiors');
     assert.ok(outerPixels > 100, 'outline is actually rendered outside the text');
 
+    const inactive = () => win.webContents.executeJavaScript(
+        `document.querySelector('#app').style.getPropertyValue('--color-inactive')`);
+    win.webContents.send('lyric:config-changed', { useThemeColorForInactive: true,
+        colorInactive: 'rgba(12, 34, 56, 0.4)' });
+    win.webContents.send('lyric:line-change', { lyricText: '主题底色测试',
+        lyricData: words('主题底色测试'), lyricTrans: '',
+        coverTheme: { light: { shadeTwo: '255,0,0' }, dark: {} } });
+    await waitFor(async () => await inactive() === 'rgba(255, 0, 0, 0.40)');
+    win.webContents.send('lyric:config-changed', { colorInactive: 'rgba(12, 34, 56, 0)' });
+    await waitFor(async () => await inactive() === 'rgba(255, 0, 0, 0.00)');
+    win.webContents.send('lyric:config-changed', { useThemeColorForInactive: false });
+    await waitFor(async () => await inactive() === 'rgba(12, 34, 56, 0)');
+    win.webContents.send('lyric:config-changed', { useThemeColorForInactive: true });
+    win.webContents.send('lyric:line-change', { lyricText: '无主题色回退',
+        lyricData: words('无主题色回退'), lyricTrans: '', coverTheme: null });
+    await waitFor(async () => await inactive() === 'rgba(12, 34, 56, 0)');
+
     const mouseActions = [];
     ipcMain.on('lyric:window', (_event, action) => mouseActions.push(action));
     ipcMain.on('player:command', (_event, action) => mouseActions.push(action));

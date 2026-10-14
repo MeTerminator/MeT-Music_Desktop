@@ -29,7 +29,7 @@ export function rgbToHex(r: number, g: number, b: number): string {
 }
 
 /** 封面 shadeTwo 为逗号分隔的 RGB。去掉亮色的粉白感，保持色相和原有透明度。 */
-export function coverThemeLyricColor(shadeTwo: string | undefined): string | null {
+export function coverThemeLyricColor(shadeTwo: string | undefined, opacity = 0.95): string | null {
   if (!shadeTwo?.trim()) return null;
   const channels = shadeTwo.split(",").map((channel) => channel.trim());
   if (channels.length !== 3 || channels.some((channel) =>
@@ -47,7 +47,7 @@ export function coverThemeLyricColor(shadeTwo: string | undefined): string | nul
   // 在低饱和度区平滑淡入，避免灰白封面微小的 RGB 偏差被放大成艳色。
   const t = Math.min(1, Math.max(0, (saturation - 0.02) / 0.10));
   const strength = t * t * (3 - 2 * t);
-  if (strength === 0 || chroma === 0) return rgba(rgb[0], rgb[1], rgb[2], 0.95);
+  if (strength === 0 || chroma === 0) return rgba(rgb[0], rgb[1], rgb[2], opacity);
 
   const targetSaturation = saturation + (Math.max(0.88, saturation) - saturation) * strength;
   const targetValue = max + (Math.max(250, max) - max) * strength;
@@ -57,5 +57,13 @@ export function coverThemeLyricColor(shadeTwo: string | undefined): string | nul
   const result = rgb.map((channel) => Math.round(
     targetValue - targetChroma + ((channel - min) / chroma) * targetChroma
   ));
-  return rgba(result[0], result[1], result[2], 0.95);
+  return rgba(result[0], result[1], result[2], opacity);
+}
+
+/** 保留底色配置中的透明度，主题色开关只替换 RGB。 */
+export function colorOpacity(color: string): number {
+  const alpha = color.match(/^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)$/i)?.[1];
+  if (alpha !== undefined) return Math.max(0, Math.min(1, Number(alpha)));
+  if (/^#[\da-f]{8}$/i.test(color)) return parseInt(color.slice(7), 16) / 255;
+  return 1;
 }
