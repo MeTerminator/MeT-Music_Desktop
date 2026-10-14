@@ -13,7 +13,8 @@
     {
       "provider": "github",
       "owner": "MeTerminator",
-      "repo": "MeT-Music_Desktop"
+      "repo": "MeT-Music_Desktop",
+      "vPrefixedTagName": false
     }
   ],
   "mac": {

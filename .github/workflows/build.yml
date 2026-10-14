@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # Allows manual trigger from the Actions tab
     inputs:
       tag:
-        description: 'Release tag (defaults to v<version> from package.json)'
+        description: 'Release tag (defaults to version from package.json, without v)'
         required: false
         type: string
       prerelease:
@@ -19,7 +19,8 @@ on:
         type: boolean
   push:
     tags:
-      - 'v*' # Trigger on version tags (e.g., v1.2.0)
+      - '[0-9]*.[0-9]*.[0-9]*' # Version tags (e.g., 2.2.0 or 2.2.0-beta.1)
+      - 'v*' # Keep supporting existing version tags
 
 # Grant write permission to the GITHUB_TOKEN to create/update releases
 permissions:
@@ -56,6 +57,7 @@ jobs:
 
       - name: Configure macOS Code Signing
         if: matrix.os == 'macos-latest'
+        shell: bash
         env:
           # Developer ID Application cert exported as .p12, then base64-encoded.
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -65,14 +67,28 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # These vars must stay UNSET when no cert is configured: electron-builder
-          # treats an empty CSC_LINK as a file path and aborts. Hence $GITHUB_ENV
-          # instead of a plain `env:` block on the build step.
           if [ -n "$MACOS_CERTIFICATE" ]; then
             CERT_PATH="$RUNNER_TEMP/certificate.p12"
-            echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERT_PATH"
-            echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
-            echo "CSC_KEY_PASSWORD=$MACOS_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+            KEYCHAIN_PATH="$RUNNER_TEMP/metmusic-signing.keychain-db"
+            KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+            echo "::add-mask::$KEYCHAIN_PASSWORD"
+            printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+
+            # Use a pre-imported keychain: electron-builder 26.15.3 incorrectly
+            # uses the certificate password to unlock its temporary keychain.
+            # CSC_LINK must remain unset so it uses CSC_KEYCHAIN directly.
+            security list-keychains -d user > "$RUNNER_TEMP/original-keychains.txt"
+            KEYCHAINS=()
+            while IFS= read -r keychain; do
+              KEYCHAINS+=("$keychain")
+            done < <(sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' "$RUNNER_TEMP/original-keychains.txt")
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security list-keychains -d user -s "$KEYCHAIN_PATH" "${KEYCHAINS[@]}"
+            echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
             echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
             echo "::notice::macOS code signing enabled"
           else
@@ -82,18 +98,34 @@ jobs:
 
           # electron-builder notarizes automatically once these three are present,
           # and throws if only some of them are. All-or-nothing.
-          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+          if [ -n "$MACOS_CERTIFICATE" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
             echo "APPLE_ID=$APPLE_ID" >> "$GITHUB_ENV"
             echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> "$GITHUB_ENV"
             echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
             echo "::notice::macOS notarization enabled"
           else
-            echo "::warning::Apple notarization credentials not set - skipping notarization"
+            echo "::warning::Signing certificate or Apple notarization credentials not set - skipping notarization"
           fi
 
       - name: Build and Package App (macOS)
         if: matrix.os == 'macos-latest'
         run: pnpm run dist:mac --publish never
+
+      - name: Clean Up macOS Code Signing
+        if: always() && matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/original-keychains.txt" ]; then
+            KEYCHAINS=()
+            while IFS= read -r keychain; do
+              KEYCHAINS+=("$keychain")
+            done < <(sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' "$RUNNER_TEMP/original-keychains.txt")
+            security list-keychains -d user -s "${KEYCHAINS[@]}"
+          fi
+          if [ -f "$RUNNER_TEMP/metmusic-signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/metmusic-signing.keychain-db"
+          fi
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/original-keychains.txt"
 
       - name: Build and Package App (Windows)
         if: matrix.os == 'windows-latest'
@@ -130,13 +162,15 @@ jobs:
 
       - name: Resolve Release Tag
         id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/}" ]; then
             TAG="${GITHUB_REF#refs/tags/}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
+          elif [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
           else
-            TAG="v$(jq -r .version package.json)"
+            TAG="$(jq -r .version package.json)"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Release tag: ${TAG}"
