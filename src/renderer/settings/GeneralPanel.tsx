@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { defaultAppConfig, type AppConfig, type AppConfigPatch } from "@shared/ipc";
 import { Switch } from "./components";
+import { useUpdateState } from "./UpdateProgress";
 
 /**
  * 常规设置面板(应用级:系统托盘、主窗关闭按钮)。
@@ -10,6 +11,16 @@ import { Switch } from "./components";
  * 也同样不做防抖 —— 这里每一项都是一次性的开关/下拉,没有边打字边提交的场景。
  */
 export default function GeneralPanel(): React.JSX.Element {
+  const update = useUpdateState();
+  const [updatePending, setUpdatePending] = useState(false);
+  const [updateError, setUpdateError] = useState("");
+  const checkUpdate = async () => {
+    setUpdatePending(true);
+    setUpdateError("");
+    try { await window.desktopAPI.checkForUpdates(); }
+    catch { setUpdateError("检查更新失败，请稍后重试"); }
+    finally { setUpdatePending(false); }
+  };
   const [config, setConfig] = useState<AppConfig>(defaultAppConfig);
   const [loaded, setLoaded] = useState(false);
   const loadedRef = useRef(false);
@@ -47,6 +58,22 @@ export default function GeneralPanel(): React.JSX.Element {
 
   return (
     <div style={loaded ? undefined : { pointerEvents: "none", opacity: 0.5 }}>
+      <section className="settings-section">
+        <h3>客户端版本</h3>
+        <div className="setting-item flex-row">
+          <label>MeT-Music v{update?.currentVersion ?? "…"}
+            <span className="setting-sub">检查客户端新版本，下载安装包到系统“下载”文件夹后手动安装更新。</span>
+          </label>
+          <button type="button" className="btn btn-secondary" disabled={!update || updatePending || update.status === "checking" || update.status === "downloading"} onClick={() => void checkUpdate()}>
+            {update?.status === "downloading" ? "正在下载…" : updatePending || update?.status === "checking" ? "检查中…" : "检查更新"}
+          </button>
+        </div>
+        <p className="setting-note" role="status">{updateError || update?.message}</p>
+        {update?.status === "downloaded" && <>
+          <p className="setting-note">v{update.version} 安装包已下载，请退出客户端后安装更新。<br />{update.filePath}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void window.desktopAPI.revealUpdate()}>在文件夹中显示安装包</button>
+        </>}
+      </section>
       <section className="settings-section">
         <h3>系统托盘</h3>
 

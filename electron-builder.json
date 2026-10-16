@@ -74,5 +74,6 @@
       "rpm",
       "AppImage"
     ]
-  }
+  },
+  "artifactName": "${productName}-${version}-${arch}.${ext}"
 }

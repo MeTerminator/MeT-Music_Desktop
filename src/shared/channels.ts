@@ -5,6 +5,10 @@
  */
 
 export const CH = {
+  updateStateGet: "update:state-get",
+  updateCheck: "update:check",
+  updateReveal: "update:reveal",
+  evUpdateState: "update:state",
   /** 主窗 preload → main:播放状态 hook 转发(旧 metmusic-hook) */
   playbackSync: "hook:playback-sync",
   playbackSyncGet: "lyric:playback-get",

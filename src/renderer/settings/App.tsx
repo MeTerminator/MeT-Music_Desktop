@@ -5,6 +5,7 @@ import { hexToRgba, rgbToHex } from "@renderer/shared/color";
 import { FontSelect, NumberInput, Switch, type FeaturedFont } from "./components";
 import ExternalApiPanel from "./ExternalApiPanel";
 import GeneralPanel from "./GeneralPanel";
+import UpdateProgress from "./UpdateProgress";
 
 /* ========== 常量 ========== */
 
@@ -428,6 +429,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="settings-container">
+      <UpdateProgress />
       {/* Title Bar */}
       <header className="title-bar">
         <span className="title">MeT-Music 设置</span>

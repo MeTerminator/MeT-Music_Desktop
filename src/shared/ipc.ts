@@ -220,6 +220,8 @@ export const LyricLineEventSchema = z.object({
 });
 export type LyricLineEvent = z.infer<typeof LyricLineEventSchema>;
 
+export type { UpdateState } from "./update";
+
 export interface AppInfo {
   screen: { width: number; height: number };
   isWayland: boolean;
@@ -243,6 +245,10 @@ export interface MainWindowAPI {
 export interface DesktopAPI {
   // invoke
   getAppInfo(): Promise<AppInfo>;
+  getUpdateState(): Promise<import("./update").UpdateState>;
+  checkForUpdates(): Promise<void>;
+  revealUpdate(): Promise<void>;
+  onUpdateState(cb: (state: import("./update").UpdateState) => void): () => void;
   getPlaybackSync(): Promise<{ song: SongSync; progress: PlaybackSync } | null>;
   onPlaybackSync(cb: (data: PlaybackSync) => void): () => void;
   getLyricBounds(): Promise<Rect>;

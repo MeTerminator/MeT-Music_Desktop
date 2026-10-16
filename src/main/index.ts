@@ -219,6 +219,10 @@ function setupIPC(): void {
         }
     });
 
+    ipcMain.handle(CH.updateStateGet, () => updater.getUpdateState());
+    ipcMain.handle(CH.updateCheck, () => updater.checkForUpdatesManually());
+    ipcMain.handle(CH.updateReveal, () => updater.revealUpdate());
+
     ipcMain.handle(CH.appInfo, (): AppInfo => {
         const { width, height } = screen.getPrimaryDisplay().workAreaSize;
         return {

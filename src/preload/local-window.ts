@@ -28,6 +28,10 @@ function subscribe<T extends unknown[]>(channel: string, cb: (...args: T) => voi
 }
 
 const api: DesktopAPI = {
+    getUpdateState: () => ipcRenderer.invoke(CH.updateStateGet),
+    checkForUpdates: () => ipcRenderer.invoke(CH.updateCheck),
+    revealUpdate: () => ipcRenderer.invoke(CH.updateReveal),
+    onUpdateState: (cb) => subscribe(CH.evUpdateState, cb),
     getPlaybackSync: () => ipcRenderer.invoke(CH.playbackSyncGet),
     onPlaybackSync: (cb) => subscribe(CH.evPlaybackSync, cb),
     // invoke
