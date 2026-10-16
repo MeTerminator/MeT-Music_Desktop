@@ -16,6 +16,7 @@ export interface TraySong {
     currentTime?: number;
     /** 总时长(秒);为 0 表示元数据还没加载出来 */
     duration?: number;
+    playbackRate?: number;
 }
 
 let tray: Tray | null = null;
@@ -31,6 +32,40 @@ let baseBitmap: Buffer | null = null;
 /** 上一帧画出的进度条像素宽 / 悬浮提示文本,只在变了的时候才去动托盘 */
 let lastBarPixels = -1;
 let lastTooltip = "";
+let lastTitle = "";
+let progressSong: TraySong = {};
+let progressAnchor = 0;
+let progressTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopProgressTimer(): void {
+    if (progressTimer) clearInterval(progressTimer);
+    progressTimer = null;
+}
+
+/** 界面只发送校准快照时，托盘仍独立推进；暂停、跳转与倍速变化会重新锚定。 */
+function currentProgress(): TraySong {
+    const elapsed = progressSong.isPlaying
+        ? Math.max(0, performance.now() - progressAnchor) / 1000 * (progressSong.playbackRate || 1)
+        : 0;
+    const position = (progressSong.currentTime || 0) + elapsed;
+    return { ...progressSong, currentTime: progressSong.duration
+        ? Math.min(position, progressSong.duration) : position };
+}
+
+function refreshProgress(): void {
+    const song = currentProgress();
+    renderTrayProgress(song);
+    if ((song.currentTime || 0) >= (song.duration || 0)) stopProgressTimer();
+}
+
+function configureProgressTimer(): void {
+    stopProgressTimer();
+    if (tray && !tray.isDestroyed() && appConfig.getConfig().trayProgress
+        && progressSong.isPlaying && (progressSong.duration || 0) > 0) {
+        progressTimer = setInterval(refreshProgress, 1000);
+        progressTimer.unref();
+    }
+}
 
 /** 秒 → mm:ss(超过一小时给 h:mm:ss) */
 function formatTime(seconds: number): string {
@@ -74,14 +109,15 @@ function renderProgressIcon(ratio: number): NativeImage | null {
     return nativeImage.createFromBitmap(bitmap, { width, height });
 }
 
-/**
- * 按当前播放状态刷新托盘图标与悬浮提示。
- *
- * index.ts 每帧 hook(~17ms)都会调到这里,故不另设定时器:进度条宽度是取整到
- * 像素的、提示文本精确到秒,两者都没变就直接返回 —— 一首歌最多重画十几次图标、
- * 每秒最多改一次提示。
- */
+/** 收到新快照时校准本地时钟，暂停和 seek 立即反映到托盘。 */
 export function updateTrayProgress(currentSong: TraySong): void {
+    progressSong = { ...currentSong };
+    progressAnchor = performance.now();
+    renderTrayProgress(progressSong);
+    configureProgressTimer();
+}
+
+function renderTrayProgress(currentSong: TraySong): void {
     if (!tray || tray.isDestroyed()) return;
 
     const enabled = appConfig.getConfig().trayProgress;
@@ -103,6 +139,13 @@ export function updateTrayProgress(currentSong: TraySong): void {
         ? Math.round(Math.min(1, Math.max(0, currentTime / duration)) * width)
         : -1;
 
+    // 16px 图标的细进度条不易辨认，macOS 菜单栏同时直接显示时间。
+    const title = hasProgress ? `${formatTime(currentTime)} / ${formatTime(duration)}` : "";
+    if (process.platform === "darwin" && title !== lastTitle) {
+        tray.setTitle(title);
+        lastTitle = title;
+    }
+
     if (barPixels === lastBarPixels && tooltip === lastTooltip) return;
 
     if (barPixels !== lastBarPixels) {
@@ -123,13 +166,26 @@ export function applyAppConfig(currentSong: TraySong): void {
     if (tray && !tray.isDestroyed() && baseIcon && !appConfig.getConfig().trayProgress) {
         tray.setImage(baseIcon);
     }
-    updateTrayProgress(currentSong);
+    // 不用 currentSong 重新锚定：它可能是数秒前的界面快照。
+    if (progressAnchor === 0) {
+        progressSong = { ...currentSong };
+        progressAnchor = performance.now();
+    }
+    renderTrayProgress(currentProgress());
+    configureProgressTimer();
 }
 
 export function createTray(onPlayPrev: PlayerAction, onPlayNext: PlayerAction, onPlayOrPause: PlayerAction): void {
     const trayIconPath = path.join(__dirname, "..", "..", "public", "icons", "tray", "tray.png");
     const trayIcon = nativeImage.createFromPath(trayIconPath).resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE });
 
+    stopProgressTimer();
+    lastBarPixels = -1;
+    lastTooltip = "";
+    lastTitle = "";
+    lastTrayState = null;
+    progressSong = {};
+    progressAnchor = 0;
     baseIcon = trayIcon;
     try {
         baseBitmap = trayIcon.toBitmap();
@@ -315,5 +371,7 @@ export function updateTrayMenu(
 }
 
 export function destroyTray(): void {
+    stopProgressTimer();
     tray?.destroy();
+    tray = null;
 }

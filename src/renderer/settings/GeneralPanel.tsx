@@ -54,7 +54,7 @@ export default function GeneralPanel(): React.JSX.Element {
           <label>
             显示播放进度
             <span className="setting-sub">
-              托盘图标底部叠一条进度条，鼠标悬浮时显示「已播放 / 总时长」
+              托盘图标底部显示进度条，悬浮查看播放时间；macOS 菜单栏同时显示「已播放 / 总时长」
             </span>
           </label>
           <Switch
