@@ -14,10 +14,12 @@ import { Toolbar } from "./Toolbar";
 import type { SongSync, PlaybackSync } from "@shared/hook-contract";
 import { anchorProgress, clockPosition, lyricAt } from "@shared/playback-clock";
 
+import type { LyricToolbarPosition } from "@shared/lyric-layout";
+
 type LyricWord = LyricLineEvent["lyricData"][number];
 type CoverTheme = LyricLineEvent["coverTheme"];
 
-/** 固定布局开销:#app 内边距 (12px*2) + 顶部工具条 (~20px),与旧实现一致 */
+/** 固定布局开销:#app 内边距 (12px*2) + 工具条 (~20px),与旧实现一致 */
 const LAYOUT_OVERHEAD = 44;
 /** 主进程窗口最小尺寸(与旧实现 JS resize 分支的 minW/minH 一致) */
 const MIN_WIDTH = 100;
@@ -142,6 +144,7 @@ export function App(): JSX.Element {
     const [config, setConfig] = useState<LyricConfig>(() => defaultLyricConfig());
     const [isPlaying, setIsPlaying] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [toolbarPosition, setToolbarPosition] = useState<LyricToolbarPosition>("top");
     const [isWayland, setIsWayland] = useState(false);
     const [songLabel, setSongLabel] = useState("");
     const [coverTheme, setCoverTheme] = useState<CoverTheme>(null);
@@ -481,6 +484,15 @@ export function App(): JSX.Element {
         let disposed = false;
         const unsubs: Array<() => void> = [];
 
+        let positionReceived = false;
+        unsubs.push(window.desktopAPI.onLyricToolbarPosition((position) => {
+            positionReceived = true;
+            setToolbarPosition(position);
+        }));
+        void window.desktopAPI.getLyricToolbarPosition().then((position) => {
+            if (!disposed && !positionReceived) setToolbarPosition(position);
+        }).catch(() => undefined);
+
         // 两个 invoke 并发发出(allSettled 保留各自的失败兜底语义)
         void Promise.allSettled([
             window.desktopAPI.getAppInfo(),
@@ -716,7 +728,7 @@ export function App(): JSX.Element {
         "--trans-font-size": `${computedTransFontSize}px`,
         "--lyric-font-family": lyricFontFamily,
         "--translation-font-family": translationFontFamily,
-        "--lyric-font-weight": String(config.lyricFontWeight ?? 700),
+        "--lyric-font-weight": String(config.lyricFontWeight),
         "--translation-font-weight": String(config.translationFontWeight ?? 400),
         "--main-color": hexToRgba(config.textColor, config.textOpacity),
         "--color-active": activeColor,
@@ -726,7 +738,7 @@ export function App(): JSX.Element {
         opacity: appOpacity,
     } as CSSProperties;
 
-    const appClassName = [config.isLock ? "lock-lyric" : "", isDragging ? "is-dragging" : ""]
+    const appClassName = [toolbarPosition === "bottom" ? "toolbar-bottom" : "", config.isLock ? "lock-lyric" : "", isDragging ? "is-dragging" : ""]
         .filter(Boolean)
         .join(" ");
 

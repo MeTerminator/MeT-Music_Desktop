@@ -4,6 +4,7 @@
  * 旧实现的 ~25 个裸通道收敛为按域命名的类型化通道(迁移对照见各 schema 注释)。
  */
 import { z } from "zod";
+import { DEFAULT_LYRIC_HEIGHT, type LyricToolbarPosition } from "./lyric-layout";
 import {
   CoverThemeSchema,
   HookPayloadSchema,
@@ -30,13 +31,13 @@ export const LyricConfigSchema = z.object({
   transFontSize: z.number().default(18),
   lyricFontFamily: z.string().default(""),
   translationFontFamily: z.string().default(""),
-  lyricFontWeight: z.number().default(700),
+  lyricFontWeight: z.number().default(600),
   translationFontWeight: z.number().default(400),
   textColor: z.string().default("#ffffff"),
   colorActive: z.string().default("#ffffff"),
   colorInactive: z.string().default("rgba(255, 255, 255, 1)"),
   showTranslation: z.boolean().default(false),
-  isLock: z.boolean().default(false),
+  isLock: z.boolean().default(true),
   bgColor: z.string().default("rgba(0, 0, 0, 0.2)"),
   useThemeColorForActive: z.boolean().default(true),
   useThemeColorForInactive: z.boolean().default(false),
@@ -46,7 +47,7 @@ export const LyricConfigSchema = z.object({
   windowX: z.number().nullable().default(null),
   windowY: z.number().nullable().default(null),
   windowWidth: z.number().nullable().default(null),
-  windowHeight: z.number().nullable().default(null),
+  windowHeight: z.number().nullable().default(DEFAULT_LYRIC_HEIGHT),
   overallOpacity: z.number().default(100),
   transFontSizeScale: z.number().default(23),
   pausedOpacity: z.number().default(50),
@@ -252,6 +253,7 @@ export interface DesktopAPI {
   getPlaybackSync(): Promise<{ song: SongSync; progress: PlaybackSync } | null>;
   onPlaybackSync(cb: (data: PlaybackSync) => void): () => void;
   getLyricBounds(): Promise<Rect>;
+  getLyricToolbarPosition(): Promise<LyricToolbarPosition>;
   getLyricConfig(): Promise<LyricConfig>;
   getExternalApiConfig(): Promise<ExternalApiConfig>;
   getExternalApiStatus(): Promise<ExternalApiStatus>;
@@ -271,6 +273,7 @@ export interface DesktopAPI {
   onStatusChange(cb: (isPlaying: boolean) => void): () => void;
   onConfigChanged(cb: (config: LyricConfig) => void): () => void;
   onWindowResized(cb: (width: number, height: number) => void): () => void;
+  onLyricToolbarPosition(cb: (position: LyricToolbarPosition) => void): () => void;
   onBoundsChanged(cb: (bounds: Rect) => void): () => void;
   onExternalApiConfigChanged(cb: (config: ExternalApiConfig) => void): () => void;
   onExternalApiStatusChanged(cb: (status: ExternalApiStatus) => void): () => void;

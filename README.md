@@ -119,3 +119,13 @@ pnpm dist
 ## 开源协议
 
 本项目采用 MIT License 开源协议。
+
+macOS 的桌面歌词使用 SwiftUI / AppKit 原生透明窗口，歌词设置仍使用 Electron。
+开发和构建时会自动通过 Xcode Command Line Tools 编译 arm64 / x86_64 通用歌词程序，
+打包时作为独立资源签名。Windows / Linux 沿用 Electron 歌词窗口。
+
+macOS 原生歌词测试（播放时钟、逐字进度、管道通信与坐标转换）：
+
+```bash
+pnpm test:native
+```

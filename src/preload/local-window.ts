@@ -36,6 +36,7 @@ const api: DesktopAPI = {
     onPlaybackSync: (cb) => subscribe(CH.evPlaybackSync, cb),
     // invoke
     getAppInfo: () => ipcRenderer.invoke(CH.appInfo) as Promise<AppInfo>,
+    getLyricToolbarPosition: () => ipcRenderer.invoke(CH.lyricToolbarPositionGet),
     getLyricBounds: () => ipcRenderer.invoke(CH.lyricBoundsGet) as Promise<Rect>,
     getLyricConfig: () => ipcRenderer.invoke(CH.lyricConfigGet) as Promise<LyricConfig>,
     getExternalApiConfig: () => ipcRenderer.invoke(CH.apiConfigGet) as Promise<ExternalApiConfig>,
@@ -60,6 +61,7 @@ const api: DesktopAPI = {
     onConfigChanged: (cb) => subscribe<[LyricConfig]>(CH.evConfigChanged, cb),
     // payload 为 [width, height](见 ipc.ts evWindowResized 注释)
     onWindowResized: (cb) => subscribe<[[number, number]]>(CH.evWindowResized, ([width, height]) => cb(width, height)),
+    onLyricToolbarPosition: (cb) => subscribe(CH.evLyricToolbarPosition, cb),
     onBoundsChanged: (cb) => subscribe<[Rect]>(CH.evBoundsChanged, cb),
     onExternalApiConfigChanged: (cb) => subscribe<[ExternalApiConfig]>(CH.evApiConfigChanged, cb),
     onExternalApiStatusChanged: (cb) => subscribe<[ExternalApiStatus]>(CH.evApiStatusChanged, cb),

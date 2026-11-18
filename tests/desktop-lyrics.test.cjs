@@ -11,6 +11,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let snapshot = null;
 let reads = 0;
 app.whenReady().then(async () => {
+    ipcMain.handle('lyric:toolbar-position-get', () => 'bottom');
     ipcMain.handle('lyric:playback-get', () => { reads++; return snapshot; });
     ipcMain.handle('app:info', () => ({ isWayland: false }));
     ipcMain.handle('lyric:config-get', () => ({ useThemeColorForActive: false }));
@@ -219,6 +220,22 @@ app.whenReady().then(async () => {
         lyricData: words('无主题色回退'), lyricTrans: '', coverTheme: null });
     await waitFor(async () => await inactive() === 'rgba(12, 34, 56, 0)');
 
+    const toolbarBelowLyrics = () => win.webContents.executeJavaScript(`(() => {
+        const header = document.querySelector('header').getBoundingClientRect();
+        const main = document.querySelector('main').getBoundingClientRect();
+        return header.top >= main.bottom - 1;
+    })()`);
+    assert.ok(await toolbarBelowLyrics(), 'initial toolbar placement comes from the host');
+    const lyricBeforeMove = await win.webContents.executeJavaScript(`document.querySelector('.lyric-wrapper').textContent`);
+    win.webContents.send('lyric:toolbar-position', 'top');
+    await waitFor(async () => !await toolbarBelowLyrics());
+    win.webContents.send('lyric:toolbar-position', 'bottom');
+    await waitFor(toolbarBelowLyrics);
+    assert.equal(await win.webContents.executeJavaScript(`document.querySelector('.lyric-wrapper').textContent`),
+        lyricBeforeMove, 'moving controls preserves the displayed lyric');
+    win.webContents.send('lyric:toolbar-position', 'top');
+    await waitFor(async () => !await toolbarBelowLyrics());
+
     const mouseActions = [];
     ipcMain.on('lyric:window', (_event, action) => mouseActions.push(action));
     ipcMain.on('player:command', (_event, action) => mouseActions.push(action));
@@ -244,7 +261,7 @@ app.whenReady().then(async () => {
     await waitFor(() => win.webContents.executeJavaScript(`!document.querySelector('#app').classList.contains('lock-lyric')`));
     assert.equal(await win.webContents.executeJavaScript(`getComputedStyle(document.querySelector('.item-lock')).pointerEvents`),
         'auto', 'external config unlock restores interaction');
-    console.log('Desktop lyrics: playback, fitting, transitions, outline and complete mouse lock passed');
+    console.log('Desktop lyrics: playback, fitting, transitions, toolbar placement, outline and complete mouse lock passed');
     win.destroy();
     app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

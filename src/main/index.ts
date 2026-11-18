@@ -1,5 +1,6 @@
 import { app, clipboard, ipcMain, screen } from "electron";
 import { createRequire } from "node:module";
+import { DEFAULT_LYRIC_HEIGHT } from "../shared/lyric-layout";
 import {
     AppConfigPatchSchema,
     CH,
@@ -231,9 +232,11 @@ function setupIPC(): void {
         };
     });
 
+    ipcMain.handle(CH.lyricToolbarPositionGet, () => windowManager.getLyricToolbarPosition());
+
     ipcMain.handle(CH.lyricBoundsGet, (): Rect => {
         const lyricWindow = windowManager.getLyricWindow();
-        if (!lyricWindow) return { x: 0, y: 0, width: 1200, height: 130 };
+        if (!lyricWindow) return { x: 0, y: 0, width: 1200, height: DEFAULT_LYRIC_HEIGHT };
         return lyricWindow.getBounds();
     });
 
@@ -302,18 +305,17 @@ function setupIPC(): void {
             }
             case "reset-position": {
                 const screenWidth = windowManager.getScreenWidth();
-                const DEFAULT_HEIGHT = 130;
 
                 const currentConfig = config.getConfig();
                 currentConfig.windowX = 0;
                 currentConfig.windowY = 0;
                 currentConfig.windowWidth = screenWidth;
-                currentConfig.windowHeight = DEFAULT_HEIGHT;
+                currentConfig.windowHeight = DEFAULT_LYRIC_HEIGHT;
                 config.saveConfig(currentConfig);
 
                 const lyricWindow = windowManager.getLyricWindow();
                 if (lyricWindow) {
-                    windowManager.resizeLyricWindow(0, 0, screenWidth, DEFAULT_HEIGHT);
+                    windowManager.resizeLyricWindow(0, 0, screenWidth, DEFAULT_LYRIC_HEIGHT);
                     windowManager.moveLyricWindow(0, 0);
                 }
                 break;

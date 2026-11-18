@@ -3,6 +3,10 @@ import path from "node:path";
 import { CH } from "../shared/ipc";
 import * as appConfig from "./app-config";
 import * as config from "./config";
+import { DEFAULT_LYRIC_HEIGHT, lyricToolbarPosition, type LyricToolbarPosition } from "../shared/lyric-layout";
+import { NativeLyricsWindow, type LyricWindow } from "./native-lyrics";
+
+let nativeLyricWindow: NativeLyricsWindow | null = null;
 
 let mainWindow: BrowserWindow | null = null;
 let lyricWindow: BrowserWindow | null = null;
@@ -11,7 +15,6 @@ let isQuiting = false;
 let lyricWindowVisible = true;
 
 const DEFAULT_LYRIC_WIDTH = 1200;
-const DEFAULT_LYRIC_HEIGHT = 100;
 let currentLyricWidth = DEFAULT_LYRIC_WIDTH;
 let currentLyricHeight = DEFAULT_LYRIC_HEIGHT;
 let saveLyricBoundsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -24,7 +27,7 @@ export function setOnLyricWindowShow(cb: () => void): void {
 
 /** 向本地窗口(歌词窗 + 设置窗)广播一条 main → renderer 事件 */
 export function broadcastToLocalWindows(channel: string, payload: unknown): void {
-    for (const win of [lyricWindow, settingsWindow]) {
+    for (const win of [getLyricWindow(), settingsWindow]) {
         if (win && !win.isDestroyed()) {
             win.webContents.send(channel, payload);
         }
@@ -254,18 +257,70 @@ export function createMainWindow(): BrowserWindow {
 }
 
 export function setLyricWindowLock(isLock: boolean): void {
+    if (nativeLyricWindow) { nativeLyricWindow.setIgnoreMouseEvents(isLock); return; }
     if (!lyricWindow) return;
     // 锁定时连鼠标移动也不转发，窗口只允许从设置或托盘解锁。
     lyricWindow.setIgnoreMouseEvents(isLock, { forward: false });
 }
 
+let lastToolbarPosition: LyricToolbarPosition | null = null;
+let lyricDisplayListenersInstalled = false;
+
+export function getLyricToolbarPosition(): LyricToolbarPosition {
+    const win = getLyricWindow();
+    // Wayland deliberately withholds global window coordinates.
+    if (!win || win.isDestroyed() || isWaylandSession()) return "top";
+    const bounds = win.getBounds();
+    return lyricToolbarPosition(bounds, screen.getDisplayMatching(bounds).bounds);
+}
+
+function updateLyricToolbarPosition(force = false): void {
+    const win = getLyricWindow();
+    if (!win || win.isDestroyed()) return;
+    const position = getLyricToolbarPosition();
+    if (force || position !== lastToolbarPosition) {
+        lastToolbarPosition = position;
+        win.webContents.send(CH.evLyricToolbarPosition, position);
+    }
+}
+
 function notifyBoundsChanged(): void {
+    updateLyricToolbarPosition();
     if (settingsWindow && !settingsWindow.isDestroyed() && lyricWindow && !lyricWindow.isDestroyed()) {
         settingsWindow.webContents.send(CH.evBoundsChanged, lyricWindow.getBounds());
     }
 }
 
-export function createLyricWindow(): BrowserWindow {
+export function createLyricWindow(): LyricWindow {
+    if (!lyricDisplayListenersInstalled) {
+        lyricDisplayListenersInstalled = true;
+        const update = (): void => updateLyricToolbarPosition();
+        screen.on("display-added", update);
+        screen.on("display-removed", update);
+        screen.on("display-metrics-changed", update);
+    }
+    if (process.platform === "darwin") {
+        if (nativeLyricWindow) return nativeLyricWindow;
+        const c = config.getConfig();
+        nativeLyricWindow = new NativeLyricsWindow({
+            x: c.windowX ?? 0, y: c.windowY ?? 0,
+            width: c.windowWidth || getScreenWidth(), height: c.windowHeight || DEFAULT_LYRIC_HEIGHT
+        }, () => {
+            updateLyricToolbarPosition(true);
+            onLyricWindowShow?.();
+        }, bounds => {
+            updateLyricToolbarPosition();
+            settingsWindow?.webContents.send(CH.evBoundsChanged, bounds);
+            if (saveLyricBoundsTimer) clearTimeout(saveLyricBoundsTimer);
+            saveLyricBoundsTimer = setTimeout(() => config.saveConfig({
+                windowX: bounds.x, windowY: bounds.y,
+                windowWidth: bounds.width, windowHeight: bounds.height
+            }), 250);
+        });
+        nativeLyricWindow.webContents.send(CH.evConfigChanged, c);
+        updateLyricToolbarPosition(true);
+        return nativeLyricWindow;
+    }
     if (lyricWindow) return lyricWindow;
 
     const currentConfig = config.getConfig();
@@ -345,6 +400,7 @@ export function createLyricWindow(): BrowserWindow {
         const latestConfig = config.getConfig();
         setLyricWindowLock(latestConfig.isLock);
         win.webContents.send(CH.evConfigChanged, latestConfig);
+        updateLyricToolbarPosition(true);
         // 窗口重建后渲染端是空白状态,补发挂起的歌词行
         if (lyricWindowVisible) onLyricWindowShow?.();
     });
@@ -399,6 +455,7 @@ export function createSettingsWindow(): BrowserWindow {
 }
 
 export function moveLyricWindow(newX: number, newY: number): void {
+    if (nativeLyricWindow) { nativeLyricWindow.setPosition(Math.round(newX), Math.round(newY)); return; }
     if (!lyricWindow) return;
 
     const finalX = Math.round(newX);
@@ -409,6 +466,7 @@ export function moveLyricWindow(newX: number, newY: number): void {
 }
 
 export function resizeLyricWindow(x: number, y: number, width: number, height: number): void {
+    if (nativeLyricWindow) { nativeLyricWindow.setBounds({ x: Math.floor(x), y: Math.floor(y), width: Math.max(100, Math.floor(width)), height: Math.max(50, Math.floor(height)) }); return; }
     if (!lyricWindow) return;
 
     currentLyricWidth = Math.floor(width);
@@ -428,8 +486,8 @@ export function getMainWindow(): BrowserWindow | null {
     return mainWindow;
 }
 
-export function getLyricWindow(): BrowserWindow | null {
-    return lyricWindow;
+export function getLyricWindow(): LyricWindow | null {
+    return nativeLyricWindow ?? lyricWindow;
 }
 
 export function getSettingsWindow(): BrowserWindow | null {
@@ -437,12 +495,12 @@ export function getSettingsWindow(): BrowserWindow | null {
 }
 
 export function isLyricWindowVisible(): boolean {
-    return lyricWindowVisible;
+    return nativeLyricWindow?.isVisible() ?? lyricWindowVisible;
 }
 
 export function toggleLyricWindowVisibility(): void {
-    const win = lyricWindow ?? createLyricWindow();
-    if (lyricWindowVisible) {
+    const win = getLyricWindow() ?? createLyricWindow();
+    if (isLyricWindowVisible()) {
         win.hide();
     } else {
         win.show();
@@ -451,4 +509,13 @@ export function toggleLyricWindowVisibility(): void {
 
 export function setQuitting(val: boolean): void {
     isQuiting = val;
+    if (val) {
+        if (saveLyricBoundsTimer) clearTimeout(saveLyricBoundsTimer);
+        if (nativeLyricWindow) {
+            const bounds = nativeLyricWindow.getBounds();
+            config.saveConfig({ windowX: bounds.x, windowY: bounds.y,
+                windowWidth: bounds.width, windowHeight: bounds.height });
+            nativeLyricWindow.destroy();
+        }
+    }
 }

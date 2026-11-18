@@ -30,6 +30,8 @@ export const CH = {
   appInfo: "app:info",
   /** invoke:歌词窗当前 bounds(旧 get-window-bounds) */
   lyricBoundsGet: "lyric:bounds-get",
+  lyricToolbarPositionGet: "lyric:toolbar-position-get",
+  evLyricToolbarPosition: "lyric:toolbar-position",
 
   /* ---- main → 歌词/设置窗事件 ---- */
   /** 歌词行更新(旧 play-lyric-change,≥50ms 合并后) */

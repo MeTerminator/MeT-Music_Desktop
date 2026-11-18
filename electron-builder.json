@@ -39,6 +39,19 @@
           "arm64"
         ]
       }
+    ],
+    "extraResources": [
+      {
+        "from": "native/macos/build/MeTMusicLyrics",
+        "to": "native/MeTMusicLyrics"
+      },
+      {
+        "from": "public/icons/icon.png",
+        "to": "native/icon.png"
+      }
+    ],
+    "binaries": [
+      "Contents/Resources/native/MeTMusicLyrics"
     ]
   },
   "win": {
@@ -75,5 +88,9 @@
       "AppImage"
     ]
   },
-  "artifactName": "${productName}-${version}-${arch}.${ext}"
+  "artifactName": "${productName}-${version}-${arch}.${ext}",
+  "asarUnpack": [
+    "out/renderer/assets/*.ttf",
+    "out/renderer/assets/*.woff2"
+  ]
 }

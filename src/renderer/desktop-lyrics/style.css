@@ -11,7 +11,7 @@
     --trans-font-size: 18px;
     --lyric-font-family: inherit;
     --translation-font-family: inherit;
-    --lyric-font-weight: 700;
+    --lyric-font-weight: 600;
     --translation-font-weight: 400;
     --main-color: #ffffff;
     --resize-border-width: 6px;
@@ -452,4 +452,13 @@ main {
 .lyric-scroll-leave .ktv-line,
 .lyric-scroll-leave .plain-line {
     transition: none;
+}
+
+/* Place controls toward the centre of the display without remounting lyric lines. */
+#app.toolbar-bottom header {
+    order: 2;
+}
+
+#app.toolbar-bottom main {
+    order: 1;
 }

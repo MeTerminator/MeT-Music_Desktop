@@ -32,3 +32,5 @@ components.d.ts
 *.sw?
 .env.development
 .env.production
+
+/native/macos/build/
