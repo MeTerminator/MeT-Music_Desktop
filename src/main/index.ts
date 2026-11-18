@@ -357,9 +357,11 @@ function setupIPC(): void {
             console.warn(`[ipc] ${CH.appConfigSet} invalid payload dropped:`, parsed.error.message);
             return;
         }
+        const previousProgress = appConfig.getConfig().trayProgress;
         const next = appConfig.saveConfig(parsed.data);
-        // 关掉托盘进度要立刻还原图标,不能等下一帧 hook(暂停时根本没有下一帧)
+        // 同步清除托盘与 Dock / 任务栏进度，暂停时也不必等播放事件。
         trayManager.applyAppConfig(currentSong);
+        if (next.trayProgress !== previousProgress) mediaManager.update(currentSong);
         windowManager.broadcastToLocalWindows(CH.evAppConfigChanged, next);
     });
 

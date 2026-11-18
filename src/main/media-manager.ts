@@ -1,5 +1,6 @@
 import { app, Menu, nativeImage, powerSaveBlocker, type BrowserWindow, type NativeImage } from "electron";
 import zlib from "node:zlib";
+import * as appConfig from "./app-config";
 import * as windowManager from "./window-manager";
 
 // System media chrome is driven by the renderer's Media Session API.
@@ -156,7 +157,7 @@ function updateProgressBar(win: BrowserWindow, song: MediaSong | null | undefine
     const currentTime = Number(song?.currentTime) || 0;
     const isPlaying = Boolean(song?.isPlaying);
 
-    if (!duration) {
+    if (!appConfig.getConfig().trayProgress || !duration) {
         if (lastProgressKey !== "off") {
             win.setProgressBar(-1);
             lastProgressKey = "off";

@@ -94,9 +94,41 @@ function checkPlatform(platform) {
     assert.equal(interval, null, 'destroy cleans up the clock');
     console.log(`PASS tray progress (${platform})`);
 }
+function checkDockProgress() {
+    let enabled = false;
+    const progress = [];
+    const window = { isDestroyed: () => false, setProgressBar: value => progress.push(value) };
+    const dependencies = {
+        electron: { nativeImage, app: { dock: { setMenu() {} } }, Menu: { buildFromTemplate: value => value } },
+        'node:zlib': require('node:zlib'),
+        './app-config': { getConfig: () => ({ trayProgress: enabled }) },
+        './window-manager': { getMainWindow: () => window },
+    };
+    const module = { exports: {} };
+    const source = esbuild.transformSync(fs.readFileSync('src/main/media-manager.ts', 'utf8'), {
+        loader: 'ts', format: 'cjs', target: 'es2022',
+    }).code;
+    vm.runInNewContext(source, {
+        module, exports: module.exports, require: name => dependencies[name],
+        Buffer, process: { platform: 'darwin' },
+    });
+
+    const paused = { currentTime: 30, duration: 120, isPlaying: false };
+    module.exports.update(paused);
+    assert.deepEqual(progress, [-1], 'disabled progress stays hidden even with a valid song');
+    enabled = true;
+    module.exports.update(paused);
+    enabled = false;
+    module.exports.update(paused);
+    module.exports.update({ ...paused, currentTime: 40 });
+    assert.deepEqual(progress, [-1, 0.25, -1], 'disabling clears a paused Dock bar and later updates leave it hidden');
+    console.log('PASS Dock progress setting');
+}
+
 app.whenReady().then(() => {
     try {
         for (const platform of ['darwin', 'win32', 'linux']) checkPlatform(platform);
+        checkDockProgress();
         app.quit();
     } catch (error) {
         console.error(error);
