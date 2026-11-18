@@ -45,8 +45,33 @@ func runNativeLyricsTests() {
     assert(abs(model.currentLine().2[0].1 - 0.4) < 0.001)
     assert(abs(color("rgba(255, 128, 0, 0.3)").alphaComponent - 0.3) < 0.001)
     assert(abs(color("#ffffff80").alphaComponent - 128.0 / 255) < 0.001)
+    runScrollTimingTests()
     runNativeRenderingTests()
     print("Native lyrics model / cache / rendering tests passed")
+}
+
+private func runScrollTimingTests() {
+    let model = LyricsModel()
+    model.receive(["channel": "lyric:playback-sync", "payload": [
+        "kind": "song", "revision": 1, "currentTime": 1, "duration": 10,
+        "timestamp": Date().timeIntervalSince1970 * 1000, "isPlaying": true, "playbackRate": 2,
+        "lineOffset": 100, "wordOffset": 300, "inclusive": true,
+        "lyrics": [
+            ["time": 0, "content": "旧行"],
+            ["time": 3000, "content": "新行", "words": [["content": "新行", "start": 3400, "end": 3900]]]
+        ]
+    ]])
+    model.anchorPosition = 1 // Remove transport delay from the test clock.
+    func frame(_ songTime: Double, prepareScroll: Bool = true) -> NativeLyricFrame {
+        model.currentFrame(at: model.anchorTime + (songTime - 1) / 2, prepareScroll: prepareScroll)
+    }
+    assert(frame(2.29).line.text == "旧行")
+    let entering = frame(2.31)
+    assert(entering.line.text == "新行", "first word begins at song time 3.1, so at 2x start scrolling 0.8 song seconds early")
+    assert(entering.progress(0) == 0, "lookahead must not advance the highlight clock")
+    assert(abs((entering.timeUntilFirstWord ?? 0) - 0.395) < 0.0001)
+    assert(frame(3.11).progress(0) > 0)
+    assert(frame(2.31, prepareScroll: false).line.text == "旧行", "reduced motion keeps normal line timing")
 }
 
 

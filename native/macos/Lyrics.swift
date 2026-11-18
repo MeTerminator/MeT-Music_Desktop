@@ -48,10 +48,13 @@ final class NativeLyricLine {
     }
 }
 
+private let lyricScrollDuration = 0.4
+
 struct NativeLyricFrame {
     let line: NativeLyricLine
     let wordTime: Double
     let legacyProgress: [Double]?
+    var timeUntilFirstWord: Double? = nil
     func progress(_ index: Int) -> Double {
         if let values = legacyProgress { return index < values.count ? min(1, max(0, values[index])) : 0 }
         let word = line.words[index]
@@ -75,6 +78,7 @@ final class LyricsModel: ObservableObject {
     private(set) var styleRevision = 0
     private var themeSignature = ""
     private var lines: [NativeLyricLine] = []
+    private var scrollCues: [(time: Double, line: NativeLyricLine)] = []
     private var intro = NativeLyricLine(text: "")
     private var legacyLine = NativeLyricLine(text: "")
     private var legacyProgress: [Double] = []
@@ -127,6 +131,7 @@ final class LyricsModel: ObservableObject {
                 legacy = payload as? [String: Any] ?? [:]; song = [:]; progress = [:]
                 if hasSyncedClock { hasSyncedClock = false }
                 lines.removeAll(keepingCapacity: true)
+                scrollCues.removeAll(keepingCapacity: true)
                 let words = legacy["lyricData"] as? [[String: Any]] ?? []
                 let text = string(legacy, "lyricText"), translation = string(legacy, "lyricTrans")
                 let contents = words.map { string($0, "content") }
@@ -164,6 +169,10 @@ final class LyricsModel: ObservableObject {
                         return NativeLyricLine(time: number(line, "time"), text: string(line, "content"),
                             translation: string(line, "tran"), words: words)
                     }
+                    scrollCues = lines.map { line in
+                        let firstWord = line.hasText ? line.words.first : nil
+                        return (time: firstWord.map { $0.start - wordOffset } ?? line.time - lineOffset, line: line)
+                    }.sorted { $0.time < $1.time }
                     updateTheme(p)
                     if !hasSyncedClock { hasSyncedClock = true }
                 }
@@ -191,21 +200,37 @@ final class LyricsModel: ObservableObject {
             styleRevision &+= 1
         }
     }
-    func currentFrame(at monotonic: Double = ProcessInfo.processInfo.systemUptime) -> NativeLyricFrame {
+    func currentFrame(at monotonic: Double = ProcessInfo.processInfo.systemUptime,
+                      prepareScroll: Bool = false) -> NativeLyricFrame {
         if !hasSyncedClock { return NativeLyricFrame(line: legacyLine, wordTime: 0, legacyProgress: legacyProgress) }
         var seconds = anchorPosition + (playing ? max(0, monotonic - anchorTime) * playbackRate : 0)
         seconds = max(0, duration > 0 ? min(duration, seconds) : seconds)
-        let lineTime = seconds * 1000 + lineOffset
+        let position = seconds * 1000
+        let lineTime = position + lineOffset
+        let wordTime = position + wordOffset
+        // Convert the animation's wall time to song time. Only selection looks ahead.
+        let lead = lyricScrollDuration * playbackRate * 1000
         // Lines are decoded and sorted once per song. Binary search also handles seek backwards.
         var low = 0, high = lines.count
         while low < high {
             let mid = (low + high) / 2
-            if inclusive ? lines[mid].time <= lineTime : lines[mid].time < lineTime { low = mid + 1 }
+            let reached: Bool
+            if prepareScroll {
+                // Rapid consecutive lines may have less than 400 ms between their first words.
+                // Keep the current line through its own cue and shorten the following scroll.
+                let start = scrollCues[mid].time - lead
+                let previousCue = mid > 0 ? scrollCues[mid - 1].time : start
+                reached = position >= max(start, previousCue)
+            } else {
+                reached = inclusive ? lines[mid].time <= lineTime : lines[mid].time < lineTime
+            }
+            if reached { low = mid + 1 }
             else { high = mid }
         }
-        let selected = low > 0 ? lines[low - 1] : intro
+        let selected = low == 0 ? intro : (prepareScroll ? scrollCues[low - 1].line : lines[low - 1])
         let line = selected.hasText ? selected : intro
-        return NativeLyricFrame(line: line, wordTime: seconds * 1000 + wordOffset, legacyProgress: nil)
+        let remaining = line.words.first.map { ($0.start - wordTime) / (1000 * playbackRate) }
+        return NativeLyricFrame(line: line, wordTime: wordTime, legacyProgress: nil, timeUntilFirstWord: remaining)
     }
     func currentLine() -> (String, String, [(String, Double)]) {
         let frame = currentFrame()
@@ -389,22 +414,47 @@ final class LyricsRenderer {
 struct LyricsCanvas: View {
     @ObservedObject var model: LyricsModel
     @ObservedObject private var renderState: LyricsRenderState
-    @State private var renderer = LyricsRenderer()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     init(model: LyricsModel) {
         self.model = model
         self.renderState = model.renderState
     }
+
     var body: some View {
         let _ = renderState.revision
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !model.shouldAnimate)) { _ in
-            let frame = model.currentFrame()
-            Canvas { context, size in
-                context.withCGContext { cg in
-                    renderer.draw(frame, model: model, in: cg, size: size, scale: Double(model.panel?.backingScaleFactor ?? 2))
-                }
+            let animate = model.visible && !reduceMotion
+            let frame = model.currentFrame(prepareScroll: animate)
+            // A late frame or seek uses only the time still available before highlighting starts.
+            let duration = min(lyricScrollDuration, max(0, frame.timeUntilFirstWord ?? lyricScrollDuration))
+            ZStack {
+                LyricsLineCanvas(model: model, frame: frame)
+                    .id(ObjectIdentifier(frame.line))
+                    .transition(animate ? .asymmetric(insertion: .move(edge: .bottom),
+                                                      removal: .move(edge: .top)) : .identity)
             }
-            .accessibilityLabel(frame.line.text)
+            .clipped()
+            .animation(animate && duration > 0 ? .timingCurve(0.2, 0, 0.2, 1, duration: duration) : nil,
+                       value: ObjectIdentifier(frame.line))
         }
+        .id(model.visible)
+    }
+}
+
+private struct LyricsLineCanvas: View {
+    let model: LyricsModel
+    let frame: NativeLyricFrame
+    @State private var renderer = LyricsRenderer()
+
+    var body: some View {
+        // Each displayed line owns its cache, so the outgoing line keeps its last highlight and image.
+        Canvas { context, size in
+            context.withCGContext { cg in
+                renderer.draw(frame, model: model, in: cg, size: size, scale: Double(model.panel?.backingScaleFactor ?? 2))
+            }
+        }
+        .accessibilityLabel(frame.line.text)
     }
 }
 
