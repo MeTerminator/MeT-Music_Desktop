@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # Allows manual trigger from the Actions tab
     inputs:
       tag:
-        description: 'Release tag (defaults to version from package.json, without v)'
+        description: 'Release tag and app version, e.g. 2.3.1 or v2.3.1 (leave blank for a development build)'
         required: false
         type: string
       prerelease:
@@ -31,8 +31,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version:
+    name: Resolve Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      app-version: ${{ steps.meta.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve Release Tag and App Version
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const ref = process.env.GITHUB_REF;
+          const tag = ref.startsWith('refs/tags/')
+            ? ref.slice('refs/tags/'.length)
+            : process.env.INPUT_TAG.trim() || require('./package.json').version;
+          const version = tag.replace(/^v/, '');
+          const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+          const match = semver.exec(version);
+          if (!match || match[0] !== version || match[4]?.split('.').some(part => /^0[0-9]+$/.test(part))) {
+            throw new Error(`Invalid release version: ${JSON.stringify(tag)}. Use a version like 2.3.1 or v2.3.1-beta.1.`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\napp_version=${version}\n`);
+          console.log(`Release tag: ${tag}, app version: ${version}`);
+          NODE
+
   build:
     name: Build & Package (${{ matrix.os }})
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -54,6 +87,12 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: Set Packaged App Version
+        env:
+          APP_VERSION: ${{ needs.version.outputs.app-version }}
+        shell: bash
+        run: npm pkg set "version=$APP_VERSION"
 
       - name: Configure macOS Code Signing
         if: matrix.os == 'macos-latest'
@@ -153,28 +192,11 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [version, build]
+    if: needs.version.outputs.app-version != '0.0.0-dev'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Resolve Release Tag
-        id: meta
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/}" ]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          elif [ -n "$INPUT_TAG" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="$(jq -r .version package.json)"
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Release tag: ${TAG}"
-
       - name: Download All Build Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -188,8 +210,9 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           draft: ${{ inputs.draft == true }}
           prerelease: ${{ inputs.prerelease == true }}
           generate_release_notes: true
